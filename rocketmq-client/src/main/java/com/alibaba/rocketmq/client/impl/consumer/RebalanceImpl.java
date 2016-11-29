@@ -50,10 +50,10 @@ import com.alibaba.rocketmq.common.protocol.heartbeat.SubscriptionData;
 public abstract class RebalanceImpl {
     protected static final Logger log = ClientLogger.getLog();
     protected final ConcurrentHashMap<MessageQueue, ProcessQueue> processQueueTable =
-            new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);
+            new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);//64对应业务线程池的最大数量~~
     protected final ConcurrentHashMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
             new ConcurrentHashMap<String, Set<MessageQueue>>();
-    protected final ConcurrentHashMap<String /* topic */, SubscriptionData> subscriptionInner =
+    protected final ConcurrentHashMap<String /* topic */, SubscriptionData/*订阅关系*/> subscriptionInner =
             new ConcurrentHashMap<String, SubscriptionData>();
     protected String consumerGroup;
     protected MessageModel messageModel;
@@ -185,7 +185,9 @@ public abstract class RebalanceImpl {
     }
 
 
+    //以brokerName为单位，向broker们中的master发送锁queues命令。根据返回的结果来锁定或解锁ProcessQueue
     public void lockAll() {
+        //要锁定哪些queues？rebalance的分配策略决定consumer应该消费哪些queue！
         HashMap<String, Set<MessageQueue>> brokerMqs = this.buildProcessQueueTableByBrokerName();
 
         Iterator<Entry<String, Set<MessageQueue>>> it = brokerMqs.entrySet().iterator();
@@ -198,7 +200,7 @@ public abstract class RebalanceImpl {
                 continue;
 
             FindBrokerResult findBrokerResult =
-                    this.mQClientFactory.findBrokerAddressInSubscribe(brokerName, MixAll.MASTER_ID, true);
+                    this.mQClientFactory.findBrokerAddressInSubscribe(brokerName, MixAll.MASTER_ID, true);//找到brokerName中的master
             if (findBrokerResult != null) {
                 LockBatchRequestBody requestBody = new LockBatchRequestBody();
                 requestBody.setConsumerGroup(this.consumerGroup);
@@ -208,21 +210,21 @@ public abstract class RebalanceImpl {
                 try {
                     Set<MessageQueue> lockOKMQSet =
                             this.mQClientFactory.getMQClientAPIImpl().lockBatchMQ(
-                                    findBrokerResult.getBrokerAddr(), requestBody, 1000);
+                                    findBrokerResult.getBrokerAddr(), requestBody, 1000);//向master发送锁queues请求
 
                     for (MessageQueue mq : lockOKMQSet) {
                         ProcessQueue processQueue = this.processQueueTable.get(mq);
                         if (processQueue != null) {
-                            if (!processQueue.isLocked()) {
+                            if (!processQueue.isLocked()) {//上次锁请求时，还没被锁，这次被锁了。说明是从其他consumer抢过来的
                                 log.info("the message queue locked OK, Group: {} {}", this.consumerGroup, mq);
                             }
 
-                            processQueue.setLocked(true);
+                            processQueue.setLocked(true);//锁住缓存队列
                             processQueue.setLastLockTimestamp(System.currentTimeMillis());
                         }
                     }
                     for (MessageQueue mq : mqs) {
-                        if (!lockOKMQSet.contains(mq)) {
+                        if (!lockOKMQSet.contains(mq)) {//master让你锁住的queue中没有的mq，解锁之
                             ProcessQueue processQueue = this.processQueueTable.get(mq);
                             if (processQueue != null) {
                                 processQueue.setLocked(false);
@@ -278,10 +280,10 @@ public abstract class RebalanceImpl {
                 break;
             }
             case CLUSTERING: {
-                Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
-                List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
+                Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);//topic下所有的queue【不止是当前consumer消费的queue】
+                List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);//询问broker当前topic有哪些consumer在消费
                 if (null == mqSet) {
-                    if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
+                    if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {//特殊topic
                         log.warn("doRebalance, {}, but the topic[{}] not exist.", consumerGroup, topic);
                     }
                 }
@@ -305,7 +307,7 @@ public abstract class RebalanceImpl {
                                 this.consumerGroup, //
                                 this.mQClientFactory.getClientId(), //
                                 mqAll,//
-                                cidAll);
+                                cidAll);//给该consumer分配他应该消费的queue
                     } catch (Throwable e) {
                         log.error(
                                 "AllocateMessageQueueStrategy.allocate Exception. allocateMessageQueueStrategyName={}",
@@ -358,16 +360,16 @@ public abstract class RebalanceImpl {
         boolean changed = false;
 
         Iterator<Entry<MessageQueue, ProcessQueue>> it = this.processQueueTable.entrySet().iterator();
-        while (it.hasNext()) {
+        while (it.hasNext()) {//只是想遍历本地所有的MessageQueue，从processQueueTable取只是方便？
             Entry<MessageQueue, ProcessQueue> next = it.next();
             MessageQueue mq = next.getKey();
             ProcessQueue pq = next.getValue();
 
             if (mq.getTopic().equals(topic)) {
                 if (!mqSet.contains(mq)) {
-                    pq.setDropped(true);
-                    if (this.removeUnnecessaryMessageQueue(mq, pq)) {
-                        it.remove();
+                    pq.setDropped(true);//新一轮分配的queue中不包含上一轮中的某个queue
+                    if (this.removeUnnecessaryMessageQueue(mq, pq)) {//通知broker，我真正消费的位置，当然不包括缓存队列中的。∴频繁rebalance会造成一定浪费
+                        it.remove();//ProcessQueue缓存的尚未被消费的消息也被回收了
                         changed = true;
                         log.info("doRebalance, {}, remove unnecessary mq, {}", consumerGroup, mq);
                     }
@@ -376,7 +378,7 @@ public abstract class RebalanceImpl {
                     switch (this.consumeType()) {
                         case CONSUME_ACTIVELY:
                             break;
-                        case CONSUME_PASSIVELY:
+                        case CONSUME_PASSIVELY://被动消费，且很久不拉。也要被清理
                             pq.setDropped(true);
                             if (this.removeUnnecessaryMessageQueue(mq, pq)) {
                                 it.remove();
@@ -396,7 +398,7 @@ public abstract class RebalanceImpl {
         List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
         for (MessageQueue mq : mqSet) {
             if (!this.processQueueTable.containsKey(mq)) {
-                PullRequest pullRequest = new PullRequest();
+                PullRequest pullRequest = new PullRequest();//对于新来的queue，构造响应的拉取对象
                 pullRequest.setConsumerGroup(consumerGroup);
                 pullRequest.setMessageQueue(mq);
                 pullRequest.setProcessQueue(new ProcessQueue());
@@ -414,7 +416,7 @@ public abstract class RebalanceImpl {
             }
         }
 
-        this.dispatchPullRequest(pullRequestList);
+        this.dispatchPullRequest(pullRequestList);//新加入的queue执行立即拉取
 
         return changed;
     }

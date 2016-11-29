@@ -327,6 +327,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             return;
         }
 
+        //consumer被挂起，稍后重新put进pullRequestQueue，run会再拉出来溜一圈
         if (this.isPause()) {
             log.warn("consumer was paused, execute pull request later. instanceName={}",
                 this.defaultMQPushConsumer.getInstanceName());
@@ -334,6 +335,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             return;
         }
 
+        //缓存的消息太多(>1000)，过会再拉
         long size = processQueue.getMsgCount().get();
         if (size > this.defaultMQPushConsumer.getPullThresholdForQueue()) {
             this.executePullRequestLater(pullRequest, PullTimeDelayMillsWhenFlowControl);
@@ -344,7 +346,9 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             return;
         }
 
+        //并发消费or顺序消费
         if (!this.consumeOrderly) {
+            //缓存中最小key和最大key的跨度过大(>2000)，过会再拉【why跨度!=消息数量？当这个queue被多个consumer切换消费过，那顺序消费当然不存在该问题】
             if (processQueue.getMaxSpan() > this.defaultMQPushConsumer.getConsumeConcurrentlyMaxSpan()) {
                 this.executePullRequestLater(pullRequest, PullTimeDelayMillsWhenFlowControl);
                 if ((flowControlTimes2++ % 1000) == 0) {
@@ -366,13 +370,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
         final long beginTimestamp = System.currentTimeMillis();
 
+        //构造拉消息的回调
         PullCallback pullCallback = new PullCallback() {
             @Override
             public void onSuccess(PullResult pullResult) {
                 if (pullResult != null) {
                     pullResult =
                             DefaultMQPushConsumerImpl.this.pullAPIWrapper.processPullResult(
-                                pullRequest.getMessageQueue(), pullResult, subscriptionData);
+                                pullRequest.getMessageQueue(), pullResult, subscriptionData);//反序列化
 
                     switch (pullResult.getPullStatus()) {
                     case FOUND:
@@ -384,7 +389,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
                         long firstMsgOffset = Long.MAX_VALUE;
                         if (pullResult.getMsgFoundList() == null || pullResult.getMsgFoundList().isEmpty()) {
-                            DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
+                            DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);//拉取到的消息体是空，就重拉
                         }
                         else {
                             firstMsgOffset = pullResult.getMsgFoundList().get(0).getQueueOffset();
@@ -393,13 +398,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                                 pullRequest.getConsumerGroup(), pullRequest.getMessageQueue().getTopic(),
                                 pullResult.getMsgFoundList().size());
 
-                            boolean dispathToConsume = processQueue.putMessage(pullResult.getMsgFoundList());
+                            boolean dispathToConsume = processQueue.putMessage(pullResult.getMsgFoundList());//将拉倒的消息缓存进processQueue
                             DefaultMQPushConsumerImpl.this.consumeMessageService.submitConsumeRequest(//
                                 pullResult.getMsgFoundList(), //
                                 processQueue, //
                                 pullRequest.getMessageQueue(), //
-                                dispathToConsume);
+                                dispathToConsume);//将消息们提交给业务线程
 
+                            //马上进行下一次拉取。如果broker中的queue中没有消息，consumer怎么办？--猜测case NO_NEW_MEG:
                             if (DefaultMQPushConsumerImpl.this.defaultMQPushConsumer.getPullInterval() > 0) {
                                 DefaultMQPushConsumerImpl.this.executePullRequestLater(pullRequest,
                                     DefaultMQPushConsumerImpl.this.defaultMQPushConsumer.getPullInterval());
@@ -424,7 +430,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
                         DefaultMQPushConsumerImpl.this.correctTagsOffset(pullRequest);
 
-                        DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
+                        DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);//没有新消息。也立即下一次拉取？
                         break;
                     case NO_MATCHED_MSG:
                         pullRequest.setNextOffset(pullResult.getNextBeginOffset());
@@ -485,7 +491,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         if (MessageModel.CLUSTERING == this.defaultMQPushConsumer.getMessageModel()) {
             commitOffsetValue =
                     this.offsetStore.readOffset(pullRequest.getMessageQueue(),
-                        ReadOffsetType.READ_FROM_MEMORY);
+                        ReadOffsetType.READ_FROM_MEMORY);//queue的消费位置。应该是缓存队列processQueue的消费位置，业务消费是从processQueue里拿
             if (commitOffsetValue > 0) {
                 commitOffsetEnable = true;
             }
@@ -514,10 +520,10 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 pullRequest.getMessageQueue(), // 1
                 subExpression, // 2
                 subscriptionData.getSubVersion(), // 3
-                pullRequest.getNextOffset(), // 4
+                pullRequest.getNextOffset(), // 4    broker中这次拉取的位置，上次拉取回调更新该值
                 this.defaultMQPushConsumer.getPullBatchSize(), // 5
                 sysFlag, // 6
-                commitOffsetValue,// 7
+                commitOffsetValue,// 7      真正消费完的位置，缓存队列中不一定都能消费完。是<参数4的
                 BrokerSuspendMaxTimeMillis, // 8
                 ConsumerTimeoutMillisWhenSuspend, // 9
                 CommunicationMode.ASYNC, // 10
@@ -623,8 +629,8 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         case CREATE_JUST:
             break;
         case RUNNING:
-            this.consumeMessageService.shutdown();
-            this.persistConsumerOffset();
+            this.consumeMessageService.shutdown();//关闭业务线程池
+            this.persistConsumerOffset();//记录所有queue的offset
             this.mQClientFactory.unregisterConsumer(this.defaultMQPushConsumer.getConsumerGroup());
             this.mQClientFactory.shutdown();
             log.info("the consumer [{}] shutdown OK", this.defaultMQPushConsumer.getConsumerGroup());
@@ -889,7 +895,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             case BROADCASTING:
                 break;
             case CLUSTERING:
-                final String retryTopic = MixAll.getRetryTopic(this.defaultMQPushConsumer.getConsumerGroup());
+                final String retryTopic = MixAll.getRetryTopic(this.defaultMQPushConsumer.getConsumerGroup());//每个group会默认建立一个retryTopic
                 SubscriptionData subscriptionData =
                         FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),//
                             retryTopic, SubscriptionData.SUB_ALL);
@@ -921,6 +927,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     }
 
 
+    //subExpression用于过滤消息，拉到本地过滤？用消息中哪个字段过滤？
     public void subscribe(String topic, String subExpression) throws MQClientException {
         try {
             SubscriptionData subscriptionData =

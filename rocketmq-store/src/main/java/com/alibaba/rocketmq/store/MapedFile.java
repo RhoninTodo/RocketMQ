@@ -46,9 +46,9 @@ public class MapedFile extends ReferenceResource {
     public static final int OS_PAGE_SIZE = 1024 * 4;
     private static final Logger log = LoggerFactory.getLogger(LoggerName.StoreLoggerName);
     // 当前JVM中映射的虚拟内存总大小
-    private static final AtomicLong TotalMapedVitualMemory = new AtomicLong(0);
+    private static final AtomicLong TotalMapedVitualMemory = new AtomicLong(0);//这两个变量用于监控，防止泄露，犀利！
     // 当前JVM中mmap句柄数量
-    private static final AtomicInteger TotalMapedFiles = new AtomicInteger(0);
+    private static final AtomicInteger TotalMapedFiles = new AtomicInteger(0);//Shell的ps和top命令对于mmap有先天缺陷
     // 映射的文件名
     private final String fileName;
     // 映射的起始偏移量
@@ -117,6 +117,8 @@ public class MapedFile extends ReferenceResource {
         if (buffer == null || !buffer.isDirect() || buffer.capacity() == 0)
             return;
         invoke(invoke(viewed(buffer), "cleaner"), "clean");
+        //public Cleaner cleaner() { return cleaner; }
+        //运行cleaner的clean方法
     }
 
 
@@ -159,11 +161,11 @@ public class MapedFile extends ReferenceResource {
             }
         }
 
-        ByteBuffer viewedBuffer = (ByteBuffer) invoke(buffer, methodName);
+        ByteBuffer viewedBuffer = (ByteBuffer) invoke(buffer, methodName);//如果这个buffer是其他buffer的映像，attachment()会返回原始buffer的引用
         if (viewedBuffer == null)
             return buffer;
         else
-            return viewed(viewedBuffer);
+            return viewed(viewedBuffer);//递归找到最原始的buffer真身
     }
 
 
@@ -220,13 +222,13 @@ public class MapedFile extends ReferenceResource {
             ByteBuffer byteBuffer = this.mappedByteBuffer.slice();
             byteBuffer.position(currentPos);
             AppendMessageResult result =
-                    cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, msg);
-            this.wrotePostion.addAndGet(result.getWroteBytes());
+                    cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, msg);//如果剩余空间不够一条消息，会在填满剩余空间
+            this.wrotePostion.addAndGet(result.getWroteBytes());//WroteBytes=maxBlank，这时wrotePostion+=maxBlank，isFull返回true
             this.storeTimestamp = result.getStoreTimestamp();
             return result;
         }
 
-        // 上层应用应该保证不会走到这里
+        // 上层应用应该保证不会走到这里。也就是说，调用appendMessage前应该判断好文件越界
         log.error("MapedFile.appendMessage return null, wrotePostion: " + currentPos + " fileSize: "
                 + this.fileSize);
         return new AppendMessageResult(AppendMessageStatus.UNKNOWN_ERROR);
@@ -243,7 +245,7 @@ public class MapedFile extends ReferenceResource {
 
     /**
      * 向存储层追加数据，一般在SLAVE存储结构中使用
-     * 
+     *
      * @return 返回写入了多少数据
      */
     public boolean appendMessage(final byte[] data) {

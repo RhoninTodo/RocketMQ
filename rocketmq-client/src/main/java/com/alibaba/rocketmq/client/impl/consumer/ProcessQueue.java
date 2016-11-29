@@ -69,6 +69,7 @@ public class ProcessQueue {
     private volatile long msgAccCnt = 0;
 
 
+    //每隔一会就要对每个mq请求一次锁，稳？
     public boolean isLockExpired() {
         boolean result = (System.currentTimeMillis() - this.lastLockTimestamp) > RebalanceLockMaxLiveTime;
         return result;
@@ -90,7 +91,7 @@ public class ProcessQueue {
                     MessageExt old = msgTreeMap.put(msg.getQueueOffset(), msg);
                     if (null == old) {
                         validMsgCnt++;
-                        this.queueOffsetMax = msg.getQueueOffset();
+                        this.queueOffsetMax = msg.getQueueOffset();//说明msg中QueueOffset是递增的
                     }
                 }
                 msgCount.addAndGet(validMsgCnt);
@@ -205,7 +206,7 @@ public class ProcessQueue {
         return locked;
     }
 
-
+    //消费回滚：回滚后treeMap数据应该变多。tempTreeMap中是要被消费的消息
     public void rollback() {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
@@ -222,7 +223,7 @@ public class ProcessQueue {
         }
     }
 
-
+    //消费提交：清空tempTreeMap中正被消费的消息即可
     public long commit() {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
@@ -245,7 +246,7 @@ public class ProcessQueue {
         return -1;
     }
 
-
+    //类似于rollback
     public void makeMessageToCosumeAgain(List<MessageExt> msgs) {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
@@ -264,6 +265,7 @@ public class ProcessQueue {
         }
     }
 
+    //开启消费时调用。将treeMap中前batchSize个节点放入tempTreeMap
     public List<MessageExt> takeMessags(final int batchSize) {
         List<MessageExt> result = new ArrayList<MessageExt>(batchSize);
         final long now = System.currentTimeMillis();
@@ -364,6 +366,7 @@ public class ProcessQueue {
     }
 
 
+    //缓存消息processQueue的状况，填充进对象返回
     public void fillProcessQueueInfo(final ProcessQueueInfo info) {
         try {
             this.lockTreeMap.readLock().lockInterruptibly();

@@ -113,11 +113,11 @@ public class MapedFileQueue {
         for (MapedFile file : this.mapedFiles) {
             long fileTailOffset = file.getFileFromOffset() + this.mapedFileSize;
             if (fileTailOffset > offset) {
-                if (offset >= file.getFileFromOffset()) {
+                if (offset >= file.getFileFromOffset()) {//包含无效数据的文件，重设写指针和提交指针
                     file.setWrotePostion((int) (offset % this.mapedFileSize));
                     file.setCommittedPosition((int) (offset % this.mapedFileSize));
                 }
-                else {
+                else {//无效数据之后的文件没用了
                     // 将文件删除掉
                     file.destroy(1000);
                     willRemoveFiles.add(file);
@@ -161,7 +161,7 @@ public class MapedFileQueue {
             Arrays.sort(files);
             for (File file : files) {
                 // 校验文件大小是否匹配
-                if (file.length() != this.mapedFileSize) {
+                if (file.length() != this.mapedFileSize) {//最后一个文件很有可能没满
                     log.warn(file + "\t" + file.length()
                             + " length not matched message store config value, ignore it");
                     return true;
@@ -237,16 +237,16 @@ public class MapedFileQueue {
         }
 
         if (createOffset != -1) {
-            String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);
+            String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);//新建一个MapedFile
             String nextNextFilePath =
                     this.storePath + File.separator
-                            + UtilAll.offset2FileName(createOffset + this.mapedFileSize);
+                            + UtilAll.offset2FileName(createOffset + this.mapedFileSize);//再新建一个MapedFile，相当于预分配
             MapedFile mapedFile = null;
 
             if (this.allocateMapedFileService != null) {
                 mapedFile =
                         this.allocateMapedFileService.putRequestAndReturnMapedFile(nextFilePath,
-                            nextNextFilePath, this.mapedFileSize);
+                            nextNextFilePath, this.mapedFileSize);//mmap会占用大量内存，放到服务里创建
             }
             else {
                 try {

@@ -199,7 +199,7 @@ public class ScheduleMessageService extends ConfigManager {
 
         String levelString = this.defaultMessageStore.getMessageStoreConfig().getMessageDelayLevel();
         try {
-            String[] levelArray = levelString.split(" ");
+            String[] levelArray = levelString.split(" ");// "5s 10s 30s 1m 5m 30m 1h 1d"这样的字符串
             for (int i = 0; i < levelArray.length; i++) {
                 String value = levelArray[i];
                 String ch = value.substring(value.length() - 1);
@@ -211,7 +211,7 @@ public class ScheduleMessageService extends ConfigManager {
                 }
                 long num = Long.parseLong(value.substring(0, value.length() - 1));
                 long delayTimeMillis = tu * num;
-                this.delayLevelTable.put(level, delayTimeMillis);
+                this.delayLevelTable.put(level, delayTimeMillis);//{1:5000,2:10000,3:30000,4:60000,5:300000,6:1800000,7:3600000,8:86400000}
             }
         }
         catch (Exception e) {

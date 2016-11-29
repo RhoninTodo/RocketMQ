@@ -27,13 +27,13 @@ import com.alibaba.rocketmq.common.constant.LoggerName;
 
 /**
  * 消费队列实现
- * 
+ * 默认每个ConsumeQueue存放30w条消息，也就是30w*20=600W Bytes大小
  * @author shijia.wxr<vintage.wang@gmail.com>
  * @since 2013-7-21
  */
 public class ConsumeQueue {
     // 存储单元大小
-    public static final int CQStoreUnitSize = 20;
+    public static final int CQStoreUnitSize = 20;//每条消息用20bytes描述
     private static final Logger log = LoggerFactory.getLogger(LoggerName.StoreLoggerName);
     private static final Logger logError = LoggerFactory.getLogger(LoggerName.StoreErrorLoggerName);
     // 存储顶层对象
@@ -48,7 +48,7 @@ public class ConsumeQueue {
     private final ByteBuffer byteBufferIndex;
     // 配置
     private final String storePath;
-    private final int mapedFileSize;
+    private final int mapedFileSize;//30w*20
     // 最后一个消息对应的物理Offset
     private long maxPhysicOffset = -1;
     // 逻辑队列的最小Offset，删除物理文件时，计算出来的最小Offset
@@ -135,7 +135,7 @@ public class ConsumeQueue {
                         log.info("recover next consume queue file, " + mapedFile.getFileName());
                     }
                 }
-                else {
+                else {//三个文件中某一个存储单元无效
                     log.info("recover current consume queue queue over " + mapedFile.getFileName() + " "
                             + (processOffset + mapedFileOffset));
                     break;
@@ -143,7 +143,7 @@ public class ConsumeQueue {
             }
 
             processOffset += mapedFileOffset;
-            this.mapedFileQueue.truncateDirtyFiles(processOffset);
+            this.mapedFileQueue.truncateDirtyFiles(processOffset);//根据无效数据的位置，重设mapedFile相关指针
         }
     }
 
@@ -404,7 +404,7 @@ public class ConsumeQueue {
                 this.defaultMessageStore.getStoreCheckpoint().setLogicsMsgTimestamp(storeTimestamp);
                 return;
             }
-            // 只有一种情况会失败，创建新的MapedFile时报错或者超时
+            // 只有一种情况会失败，创建新的MapedFile时报错或者超时。MapedFile.size不能整除20，也会有问题
             else {
                 // XXX: warn and notify me
                 log.warn("[BUG]put commit log postion info to " + topic + ":" + queueId + " " + offset
@@ -426,14 +426,16 @@ public class ConsumeQueue {
 
 
     /**
-     * 存储一个20字节的信息，putMessagePostionInfo只有一个线程调用，所以不需要加锁
-     * 
+     * 存储一个20字节的信息，putMessagePostionInfo只有一个线程调用，所以不需要加锁。就是DispatchMessageService分发线程
+     *
      * @param offset
      *            消息对应的CommitLog offset
      * @param size
      *            消息在CommitLog存储的大小
      * @param tagsCode
      *            tags 计算出来的长整数
+     * @param cqOffset
+     *            consume queue写偏移，commit log从defaultMessageStore的map缓存中取得+1
      * @return 是否成功
      */
     private boolean putMessagePostionInfo(final long offset, final int size, final long tagsCode,
@@ -456,7 +458,7 @@ public class ConsumeQueue {
             // 纠正MapedFile逻辑队列索引顺序
             if (mapedFile.isFirstCreateInQueue() && cqOffset != 0 && mapedFile.getWrotePostion() == 0) {
                 this.minLogicOffset = expectLogicOffset;
-                this.fillPreBlank(mapedFile, expectLogicOffset);
+                this.fillPreBlank(mapedFile, expectLogicOffset);//expectLogicOffset位置前预填充固定值
                 log.info("fill pre blank space " + mapedFile.getFileName() + " " + expectLogicOffset + " "
                         + mapedFile.getWrotePostion());
             }
@@ -479,7 +481,7 @@ public class ConsumeQueue {
 
             // 记录物理队列最大offset
             this.maxPhysicOffset = offset;
-            return mapedFile.appendMessage(this.byteBufferIndex.array());
+            return mapedFile.appendMessage(this.byteBufferIndex.array());//空间不足返回false。如果size不能整除20，会有bug！
         }
 
         return false;

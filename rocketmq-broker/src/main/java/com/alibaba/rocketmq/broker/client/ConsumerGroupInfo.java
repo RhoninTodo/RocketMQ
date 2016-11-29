@@ -173,7 +173,7 @@ public class ConsumerGroupInfo {
     public boolean updateSubscription(final Set<SubscriptionData> subList) {
         boolean updated = false;
         // 增加新的订阅关系
-        for (SubscriptionData sub : subList) {
+        for (SubscriptionData sub : subList) { //应该是consumer经过rebalance得出的结果
             SubscriptionData old = this.subscriptionTable.get(sub.getTopic());
             if (old == null) {
                 SubscriptionData prev = this.subscriptionTable.put(sub.getTopic(), sub);
@@ -184,7 +184,7 @@ public class ConsumerGroupInfo {
                 }
             }
             else if (sub.getSubVersion() > old.getSubVersion()) {
-                if (this.consumeType == ConsumeType.CONSUME_PASSIVELY) {
+                if (this.consumeType == ConsumeType.CONSUME_PASSIVELY) { //相当于push模式？
                     log.info("subscription changed, group: {} OLD: {} NEW: {}", //
                         this.groupName,//
                         old.toString(),//

@@ -43,7 +43,7 @@ import com.alibaba.rocketmq.store.schedule.ScheduleMessageService;
 
 /**
  * Store all metadata downtime for recovery, data protection reliability
- * 
+ * 被本机所有queue共享，由ConsumeQueue做区分
  * @author shijia.wxr<vintage.wang@gmail.com>
  * @since 2013-7-21
  */
@@ -53,12 +53,12 @@ public class CommitLog {
     public final static int MessageMagicCode = 0xAABBCCDD ^ 1880681586 + 8;
     // End of file empty MAGIC CODE cbd43194
     private final static int BlankMagicCode = 0xBBCCDDEE ^ 1880681586 + 8;
-    private final MapedFileQueue mapedFileQueue;
+    private final MapedFileQueue mapedFileQueue;//每个mapedFile默认1GB
     private final DefaultMessageStore defaultMessageStore;
     private final FlushCommitLogService flushCommitLogService;
     private final AppendMessageCallback appendMessageCallback;
     private HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(
-        1024);
+        1024);//每个queue都对应一个consume queue，记录它们的偏移都到了哪
 
 
     public CommitLog(final DefaultMessageStore defaultMessageStore) {
@@ -175,7 +175,7 @@ public class CommitLog {
             while (true) {
                 DispatchRequest dispatchRequest =
                         this.checkMessageAndReturnSize(byteBuffer, checkCRCOnRecover);
-                int size = dispatchRequest.getMsgSize();
+                int size = dispatchRequest.getMsgSize();//这个commit log文件中包含多少个消息
                 // Normal data
                 if (size > 0) {
                     mapedFileOffset += size;
@@ -383,9 +383,9 @@ public class CommitLog {
             MapedFile mapedFile = null;
             for (; index >= 0; index--) {
                 mapedFile = mapedFiles.get(index);
-                if (this.isMapedFileMatchedRecover(mapedFile)) {
+                if (this.isMapedFileMatchedRecover(mapedFile)) {//用check point匹配commit log中的MapedFile
                     log.info("recover from this maped file " + mapedFile.getFileName());
-                    break;
+                    break;//匹配到跳出
                 }
             }
 
@@ -404,7 +404,7 @@ public class CommitLog {
                 // Normal data
                 if (size > 0) {
                     mapedFileOffset += size;
-                    this.defaultMessageStore.putDispatchRequest(dispatchRequest);
+                    this.defaultMessageStore.putDispatchRequest(dispatchRequest);//对于checkpoint之后的commitlog中的数据，重新分发到逻辑、索引队列
                 }
                 // Intermediate file read error
                 else if (size == -1) {
@@ -437,7 +437,7 @@ public class CommitLog {
             this.mapedFileQueue.truncateDirtyFiles(processOffset);
 
             // Clear ConsumeQueue redundant data
-            this.defaultMessageStore.truncateDirtyLogicFiles(processOffset);
+            this.defaultMessageStore.truncateDirtyLogicFiles(processOffset);//缩减逻辑文件，即清除ConsumeQueue的多余数据
         }
         // Commitlog case files are deleted
         else {
@@ -455,14 +455,14 @@ public class CommitLog {
             return false;
         }
 
-        long storeTimestamp = byteBuffer.getLong(MessageDecoder.MessageStoreTimestampPostion);
+        long storeTimestamp = byteBuffer.getLong(MessageDecoder.MessageStoreTimestampPostion);//commit log第一条消息的存储时间戳？
         if (0 == storeTimestamp) {
             return false;
         }
 
         if (this.defaultMessageStore.getMessageStoreConfig().isMessageIndexEnable()//
                 && this.defaultMessageStore.getMessageStoreConfig().isMessageIndexSafe()) {
-            if (storeTimestamp <= this.defaultMessageStore.getStoreCheckpoint().getMinTimestampIndex()) {
+            if (storeTimestamp <= this.defaultMessageStore.getStoreCheckpoint().getMinTimestampIndex()) {//使能索引功能，则在三者中找最早
                 log.info("find check timestamp, {} {}", //
                     storeTimestamp,//
                     UtilAll.timeMillisToHumanString(storeTimestamp));
@@ -470,7 +470,7 @@ public class CommitLog {
             }
         }
         else {
-            if (storeTimestamp <= this.defaultMessageStore.getStoreCheckpoint().getMinTimestamp()) {
+            if (storeTimestamp <= this.defaultMessageStore.getStoreCheckpoint().getMinTimestamp()) {//在二者中找最早
                 log.info("find check timestamp, {} {}", //
                     storeTimestamp,//
                     UtilAll.timeMillisToHumanString(storeTimestamp));
@@ -509,7 +509,7 @@ public class CommitLog {
                 }
 
                 topic = ScheduleMessageService.SCHEDULE_TOPIC;
-                queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());
+                queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());//不同延时对应不同的queue
                 tagsCode =
                         this.defaultMessageStore.getScheduleMessageService().computeDeliverTimestamp(
                             msg.getDelayTimeLevel(), msg.getStoreTimestamp());
@@ -518,10 +518,10 @@ public class CommitLog {
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_TOPIC, msg.getTopic());
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_QUEUE_ID,
                     String.valueOf(msg.getQueueId()));
-                msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
+                msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));//真实的topic和queueId存入properties
 
                 msg.setTopic(topic);
-                msg.setQueueId(queueId);
+                msg.setQueueId(queueId);//这里的topic和queueId已经是schedule延时服务的了
             }
         }
 
@@ -569,7 +569,7 @@ public class CommitLog {
                 result.getWroteBytes(),// 4
                 tagsCode,// 5
                 msg.getStoreTimestamp(),// 6
-                result.getLogicsOffset(),// 7
+                result.getLogicsOffset(),// 7 -- 该条消息对应的consume queue的写偏移位置。每增1，对应20Bytes
                 msg.getKeys(),// 8
                 /**
                  * Transaction
@@ -577,7 +577,7 @@ public class CommitLog {
                 msg.getSysFlag(),// 9
                 msg.getPreparedTransactionOffset());// 10
 
-            this.defaultMessageStore.putDispatchRequest(dispatchRequest);
+            this.defaultMessageStore.putDispatchRequest(dispatchRequest);//分发至consume queue，通过defaultMessageStore.consumeQueueTable找关系
 
             eclipseTimeInLock = this.defaultMessageStore.getSystemClock().now() - beginLockTimestamp;
         } // end of synchronized
@@ -599,7 +599,7 @@ public class CommitLog {
             GroupCommitService service = (GroupCommitService) this.flushCommitLogService;
             if (msg.isWaitStoreMsgOK()) {
                 request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
-                service.putRequest(request);
+                service.putRequest(request);//GroupCommitService刷盘
                 boolean flushOK =
                         request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig()
                             .getSyncFlushTimeout());
@@ -615,8 +615,9 @@ public class CommitLog {
         }
         // Asynchronous flush
         else {
-            this.flushCommitLogService.wakeup();
+            this.flushCommitLogService.wakeup();//异步分发consume queue、异步flush、双写slave，怎么同步？
         }
+        //i think：异步分发一定不会失败吗？异步flush可以不同步，即使mq宕了，只要物理机不宕就ok；下面双写是同步的
 
         // Synchronous write double
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
@@ -773,7 +774,7 @@ public class CommitLog {
                     long storeTimestamp = CommitLog.this.mapedFileQueue.getStoreTimestamp();
                     if (storeTimestamp > 0) {
                         CommitLog.this.defaultMessageStore.getStoreCheckpoint().setPhysicMsgTimestamp(
-                            storeTimestamp);
+                            storeTimestamp);//为什么这里不需要将CheckPoint刷盘？
                     }
                 }
                 catch (Exception e) {
@@ -894,7 +895,7 @@ public class CommitLog {
                 long storeTimestamp = CommitLog.this.mapedFileQueue.getStoreTimestamp();
                 if (storeTimestamp > 0) {
                     CommitLog.this.defaultMessageStore.getStoreCheckpoint().setPhysicMsgTimestamp(
-                        storeTimestamp);
+                        storeTimestamp);//只设置了内存中checkpoint的commit log刷盘时间，没刷盘
                 }
 
                 this.requestsRead.clear();
@@ -963,7 +964,7 @@ public class CommitLog {
         private final ByteBuffer msgIdMemory;
         // Store the message content
         private final ByteBuffer msgStoreItemMemory;
-        // The maximum length of the message
+        // The maximum length of the message 控制每条消息不能太大
         private final int maxMessageSize;
 
 
@@ -991,7 +992,7 @@ public class CommitLog {
 
             // Record ConsumeQueue information
             String key = msgInner.getTopic() + "-" + msgInner.getQueueId();
-            Long queueOffset = CommitLog.this.topicQueueTable.get(key);
+            Long queueOffset = CommitLog.this.topicQueueTable.get(key);//
             if (null == queueOffset) {
                 queueOffset = 0L;
                 CommitLog.this.topicQueueTable.put(key, queueOffset);
@@ -1029,11 +1030,11 @@ public class CommitLog {
                     + 4 // 3 BODYCRC
                     + 4 // 4 QUEUEID
                     + 4 // 5 FLAG
-                    + 8 // 6 QUEUEOFFSET
+                    + 8 // 6 QUEUEOFFSET 自增值，可用于查找ConsumeQueue中对应的信息
                     + 8 // 7 PHYSICALOFFSET
                     + 4 // 8 SYSFLAG
-                    + 8 // 9 BORNTIMESTAMP
-                    + 8 // 10 BORNHOST
+                    + 8 // 9 BORNTIMESTAMP 生产者端时间戳
+                    + 8 // 10 BORNHOST 生产者地址
                     + 8 // 11 STORETIMESTAMP
                     + 8 // 12 STOREHOSTADDRESS
                     + 4 // 13 RECONSUMETIMES
@@ -1061,7 +1062,7 @@ public class CommitLog {
                 //
 
                 // Here the length of the specially set maxBlank
-                byteBuffer.put(this.msgStoreItemMemory.array(), 0, maxBlank);
+                byteBuffer.put(this.msgStoreItemMemory.array(), 0, maxBlank);//会把剩余空间填满
                 return new AppendMessageResult(AppendMessageStatus.END_OF_FILE, wroteOffset, maxBlank, msgId,
                     msgInner.getStoreTimestamp(), queueOffset);
             }
@@ -1122,7 +1123,7 @@ public class CommitLog {
             case MessageSysFlag.TransactionNotType:
             case MessageSysFlag.TransactionCommitType:
                 // The next update ConsumeQueue information
-                CommitLog.this.topicQueueTable.put(key, ++queueOffset);
+                CommitLog.this.topicQueueTable.put(key, ++queueOffset);//插入commit log的数据属于的consume queue偏移自增，用于后面dispatch定位
                 break;
             default:
                 break;

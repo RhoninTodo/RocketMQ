@@ -160,7 +160,7 @@ public class DefaultMessageStore implements MessageStore {
 
         for (ConcurrentHashMap<Integer, ConsumeQueue> maps : tables.values()) {
             for (ConsumeQueue logic : maps.values()) {
-                logic.truncateDirtyLogicFiles(phyOffset);
+                logic.truncateDirtyLogicFiles(phyOffset);//所有的ConsumeQueue逻辑队列对应一个commitLog，肯定要遍历的
             }
         }
     }
@@ -175,7 +175,7 @@ public class DefaultMessageStore implements MessageStore {
         boolean result = true;
 
         try {
-            boolean lastExitOK = !this.isTempFileExist();
+            boolean lastExitOK = !this.isTempFileExist();//是否存在abort文件，broker正常退出会删除这个文件。类似于vi的临时文件
             log.info("last shutdown {}", (lastExitOK ? "normally" : "abnormally"));
 
             // load 定时进度
@@ -194,11 +194,11 @@ public class DefaultMessageStore implements MessageStore {
             if (result) {
                 this.storeCheckpoint =
                         new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig
-                            .getStorePathRootDir()));
+                            .getStorePathRootDir()));//checkpoint作用是当异常恢复时需要根据checkpoint点来恢复消息
 
                 this.indexService.load(lastExitOK);
 
-                // 尝试恢复数据
+                // 尝试恢复数据，使用checkpoint
                 this.recover(lastExitOK);
 
                 log.info("load over, and the max phy offset = {}", this.getMaxPhyOffset());
@@ -1106,7 +1106,7 @@ public class DefaultMessageStore implements MessageStore {
 
 
     private void recover(final boolean lastExitOK) {
-        // 先按照正常流程恢复Consume Queue
+        // 先按照正常流程恢复Consume Queue。正常的判断逻辑是：consume queue每条数据的offset >= 0 && size > 0
         this.recoverConsumeQueue();
 
         // 正常数据恢复
@@ -1115,11 +1115,11 @@ public class DefaultMessageStore implements MessageStore {
         }
         // 异常数据恢复，OS CRASH或者JVM CRASH或者机器掉电
         else {
-            this.commitLog.recoverAbnormally();
+            this.commitLog.recoverAbnormally();//对于脏数据会重新dispatch
         }
 
         // 保证消息都能从DispatchService缓冲队列进入到真正的队列
-        while (this.dispatchMessageService.hasRemainMessage()) {
+        while (this.dispatchMessageService.hasRemainMessage()) {//如果是异常启动，肯定有remainMessage
             try {
                 Thread.sleep(500);
                 log.info("waiting dispatching message over");
@@ -1515,7 +1515,7 @@ public class DefaultMessageStore implements MessageStore {
             ConcurrentHashMap<String, ConcurrentHashMap<Integer, ConsumeQueue>> tables =
                     DefaultMessageStore.this.consumeQueueTable;
 
-            for (ConcurrentHashMap<Integer, ConsumeQueue> maps : tables.values()) {
+            for (ConcurrentHashMap<Integer, ConsumeQueue> maps : tables.values()) {//刷consume queue
                 for (ConsumeQueue cq : maps.values()) {
                     boolean result = false;
                     for (int i = 0; i < retryTimes && !result; i++) {
@@ -1528,7 +1528,7 @@ public class DefaultMessageStore implements MessageStore {
                 if (logicsMsgTimestamp > 0) {
                     DefaultMessageStore.this.getStoreCheckpoint().setLogicsMsgTimestamp(logicsMsgTimestamp);
                 }
-                DefaultMessageStore.this.getStoreCheckpoint().flush();
+                DefaultMessageStore.this.getStoreCheckpoint().flush();//刷checkpoint检查点
             }
         }
 
@@ -1602,7 +1602,7 @@ public class DefaultMessageStore implements MessageStore {
             int putMsgIndexHightWater =
                     DefaultMessageStore.this.getMessageStoreConfig().getPutMsgIndexHightWater();
             synchronized (this) {
-                this.requestsWrite.add(dispatchRequest);
+                this.requestsWrite.add(dispatchRequest);//放入写队列
                 requestsWriteSize = this.requestsWrite.size();
                 if (!this.hasNotified) {
                     this.hasNotified = true;
@@ -1637,7 +1637,7 @@ public class DefaultMessageStore implements MessageStore {
 
         private void doDispatch() {
             if (!this.requestsRead.isEmpty()) {
-                for (DispatchRequest req : this.requestsRead) {
+                for (DispatchRequest req : this.requestsRead) {//线程从读队列里取request，哪里做了swap转换？
 
                     final int tranType = MessageSysFlag.getTransactionValue(req.getSysFlag());
                     // 1、分发消息位置信息到ConsumeQueue
@@ -1656,7 +1656,7 @@ public class DefaultMessageStore implements MessageStore {
                 }
 
                 if (DefaultMessageStore.this.getMessageStoreConfig().isMessageIndexEnable()) {
-                    DefaultMessageStore.this.indexService.putRequest(this.requestsRead.toArray());
+                    DefaultMessageStore.this.indexService.putRequest(this.requestsRead.toArray());//批量建立索引
                 }
 
                 this.requestsRead.clear();

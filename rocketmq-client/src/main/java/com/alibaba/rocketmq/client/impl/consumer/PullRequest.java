@@ -24,9 +24,9 @@ import com.alibaba.rocketmq.common.message.MessageQueue;
  */
 public class PullRequest {
     private String consumerGroup;
-    private MessageQueue messageQueue;
-    private ProcessQueue processQueue;
-    private long nextOffset;
+    private MessageQueue messageQueue;//对应broker中的队列
+    private ProcessQueue processQueue;//consumer中拉取回来的消息，缓存到这里
+    private long nextOffset;//下次拉，应该从哪里拉。每次拉回调中都会更新改值
 
 
     public String getConsumerGroup() {

@@ -185,7 +185,7 @@ public class BrokerController {
             }
         }
 
-        result = result && this.messageStore.load();
+        result = result && this.messageStore.load(); // 加载本地消息
 
         if (result) {
             this.remotingServer =
@@ -208,7 +208,7 @@ public class BrokerController {
                 new ThreadFactoryImpl("PullMessageThread_"));
 
             this.adminBrokerExecutor =
-                    Executors.newFixedThreadPool(this.brokerConfig.getAdminBrokerThreadPoolNums(),
+                    Executors.newFixedThreadPool(this.brokerConfig.getAdminBrokerThreadPoolNums(), // 用于默认Processor线程池
                         new ThreadFactoryImpl("AdminBrokerThread_"));
 
             this.clientManageExecutor =
@@ -238,7 +238,7 @@ public class BrokerController {
                 @Override
                 public void run() {
                     try {
-                        BrokerController.this.consumerOffsetManager.persist();
+                        BrokerController.this.consumerOffsetManager.persist(); //刷消费进度
                     }
                     catch (Exception e) {
                         log.error("schedule persist consumerOffset error.", e);
@@ -250,7 +250,7 @@ public class BrokerController {
                 @Override
                 public void run() {
                     try {
-                        BrokerController.this.consumerOffsetManager.scanUnsubscribedTopic();
+                        BrokerController.this.consumerOffsetManager.scanUnsubscribedTopic(); // 取消订阅的topic
                     }
                     catch (Exception e) {
                         log.error("schedule scanUnsubscribedTopic error.", e);
@@ -258,16 +258,16 @@ public class BrokerController {
                 }
             }, 10, 60, TimeUnit.MINUTES);
 
-            if (this.brokerConfig.getNamesrvAddr() != null) {
+            if (this.brokerConfig.getNamesrvAddr() != null) { // 配置文件中指定name server地址
                 this.brokerOuterAPI.updateNameServerAddressList(this.brokerConfig.getNamesrvAddr());
             }
-            else if (this.brokerConfig.isFetchNamesrvAddrByAddressServer()) {
+            else if (this.brokerConfig.isFetchNamesrvAddrByAddressServer()) { // name server地址需要从指定服务器找
                 this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                     @Override
                     public void run() {
                         try {
-                            BrokerController.this.brokerOuterAPI.fetchNameServerAddr();
+                            BrokerController.this.brokerOuterAPI.fetchNameServerAddr(); // 启动一个定时
                         }
                         catch (Exception e) {
                             log.error("ScheduledTask fetchNameServerAddr exception", e);
@@ -291,7 +291,7 @@ public class BrokerController {
                     @Override
                     public void run() {
                         try {
-                            BrokerController.this.slaveSynchronize.syncAll();
+                            BrokerController.this.slaveSynchronize.syncAll(); // slave定时从slave同步信息
                         }
                         catch (Exception e) {
                             log.error("ScheduledTask syncAll slave exception", e);
@@ -305,7 +305,7 @@ public class BrokerController {
                     @Override
                     public void run() {
                         try {
-                            BrokerController.this.printMasterAndSlaveDiff();
+                            BrokerController.this.printMasterAndSlaveDiff(); // master定时打印slave落后的bytes，貌似只支持一主一从
                         }
                         catch (Exception e) {
                             log.error("schedule printMasterAndSlaveDiff error.", e);

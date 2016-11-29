@@ -36,7 +36,7 @@ public class PullMessageService extends ServiceThread {
     private final Logger log = ClientLogger.getLog();
     private final LinkedBlockingQueue<PullRequest> pullRequestQueue = new LinkedBlockingQueue<PullRequest>();
     private final MQClientInstance mQClientFactory;
-    private final ScheduledExecutorService scheduledExecutorService = Executors
+    private final ScheduledExecutorService scheduledExecutorService = Executors//用于延时拉消息
         .newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable r) {

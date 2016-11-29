@@ -36,8 +36,8 @@ public class MessageQueueLock {
         if (null == objLock) {
             objLock = new Object();
             Object prevLock = this.mqLockTable.putIfAbsent(mq, objLock);
-            if (prevLock != null) {
-                objLock = prevLock;
+            if (prevLock != null) {//这里是有可能重入的
+                objLock = prevLock;//之前线程申请的锁对象，返回给之后的线程
             }
         }
 

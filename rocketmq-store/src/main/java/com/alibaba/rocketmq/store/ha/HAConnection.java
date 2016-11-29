@@ -194,11 +194,11 @@ public class HAConnection {
                         // 接收Slave上传的offset
                         if ((this.byteBufferRead.position() - this.processPostion) >= 8) {
                             int pos = this.byteBufferRead.position() - (this.byteBufferRead.position() % 8);
-                            long readOffset = this.byteBufferRead.getLong(pos - 8);
+                            long readOffset = this.byteBufferRead.getLong(pos - 8);//拿byteBufferRead最后一个8byte对其的long
                             this.processPostion = pos;
 
                             // 处理Slave的请求
-                            HAConnection.this.slaveAckOffset = readOffset;
+                            HAConnection.this.slaveAckOffset = readOffset;//貌似就是slave双写CommitLog的offset成功后，返回这个偏移
                             if (HAConnection.this.slaveRequestOffset < 0) {
                                 HAConnection.this.slaveRequestOffset = readOffset;
                                 log.info("slave[" + HAConnection.this.clientAddr + "] request offset "
@@ -210,7 +210,7 @@ public class HAConnection {
                         }
                     }
                     else if (readSize == 0) {
-                        if (++readSizeZeroTimes >= 3) {
+                        if (++readSizeZeroTimes >= 3) {//依然是读三次
                             break;
                         }
                     }
@@ -324,7 +324,7 @@ public class HAConnection {
                     }
                     // 继续传输
                     else {
-                        this.lastWriteOver = this.transferData();
+                        this.lastWriteOver = this.transferData();//没发完，就不会构造新的header和result
                         if (!this.lastWriteOver)
                             continue;
                     }
@@ -333,7 +333,7 @@ public class HAConnection {
                     // selectResult会赋值给this.selectMapedBufferResult，出现异常也会清理掉
                     SelectMapedBufferResult selectResult =
                             HAConnection.this.haService.getDefaultMessageStore().getCommitLogData(
-                                this.nextTransferFromWhere);
+                                this.nextTransferFromWhere); //从commit log中取出数据，同步到slave
                     if (selectResult != null) {
                         int size = selectResult.getSize();
                         if (size > HAConnection.this.haService.getDefaultMessageStore()
@@ -356,10 +356,10 @@ public class HAConnection {
                         this.byteBufferHeader.putInt(size);
                         this.byteBufferHeader.flip();
 
-                        this.lastWriteOver = this.transferData();
+                        this.lastWriteOver = this.transferData();//这里可能写完成。去ReadSocketService看处理结果
                     }
                     else {
-                        // 没有数据，等待通知
+                        // 没有数据，等待通知。这里就是CommitLog service.getWaitNotifyObject().wakeupAll()唤醒的
                         HAConnection.this.haService.getWaitNotifyObject().allWaitForRunning(100);
                     }
                 }
@@ -398,7 +398,9 @@ public class HAConnection {
 
 
         /**
-         * 表示是否传输完成
+         * 表示是否传输完成。
+         * 返回：true，header和result都写入write buf了
+         *      false，并没有全部写入，完成会循环调用，直到全部写入缓冲
          */
         private boolean transferData() throws Exception {
             int writeSizeZeroTimes = 0;
@@ -411,7 +413,7 @@ public class HAConnection {
                             HAConnection.this.haService.getDefaultMessageStore().getSystemClock().now();
                 }
                 else if (writeSize == 0) {
-                    if (++writeSizeZeroTimes >= 3) {
+                    if (++writeSizeZeroTimes >= 3) {//三次写缓存都满，break之
                         break;
                     }
                 }
@@ -448,7 +450,7 @@ public class HAConnection {
 
             boolean result =
                     !this.byteBufferHeader.hasRemaining()
-                            && !this.selectMapedBufferResult.getByteBuffer().hasRemaining();
+                            && !this.selectMapedBufferResult.getByteBuffer().hasRemaining();//header和result都写成功
 
             if (!this.selectMapedBufferResult.getByteBuffer().hasRemaining()) {
                 this.selectMapedBufferResult.release();

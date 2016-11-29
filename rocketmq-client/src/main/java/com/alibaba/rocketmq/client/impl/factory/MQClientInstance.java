@@ -146,10 +146,10 @@ public class MQClientInstance {
 
         this.rebalanceService = new RebalanceService(this);
 
-        this.defaultMQProducer = new DefaultMQProducer(MixAll.CLIENT_INNER_PRODUCER_GROUP);
+        this.defaultMQProducer = new DefaultMQProducer(MixAll.CLIENT_INNER_PRODUCER_GROUP);//consumer也会内置一个producer
         this.defaultMQProducer.resetClientConfig(clientConfig);
 
-        this.consumerStatsManager = new ConsumerStatsManager(this.scheduledExecutorService);
+        this.consumerStatsManager = new ConsumerStatsManager(this.scheduledExecutorService);//和定时任务使用一个线程
 
         log.info("created a new client Instance, FactoryIndex: {} ClinetID: {} {} {}",//
                 this.instanceIndex, //
@@ -184,7 +184,7 @@ public class MQClientInstance {
                     //Start rebalance service
                     this.rebalanceService.start();
                     //Start push service
-                    this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
+                    this.defaultMQProducer.getDefaultMQProducerImpl().start(false);//为什么要再启动一个producer
                     log.info("the client factory [{}] start OK", this.clientId);
                     this.serviceState = ServiceState.RUNNING;
                     break;
@@ -234,7 +234,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
-                    MQClientInstance.this.cleanOfflineBroker();
+                    MQClientInstance.this.cleanOfflineBroker();//清理下线的broker
                     MQClientInstance.this.sendHeartbeatToAllBrokerWithLock();
                 } catch (Exception e) {
                     log.error("ScheduledTask sendHeartbeatToAllBroker exception", e);
@@ -247,7 +247,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
-                    MQClientInstance.this.persistAllConsumerOffset();
+                    MQClientInstance.this.persistAllConsumerOffset();//集群模式，推送至broker
                 } catch (Exception e) {
                     log.error("ScheduledTask persistAllConsumerOffset exception", e);
                 }
@@ -259,7 +259,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
-                    MQClientInstance.this.adjustThreadPool();
+                    MQClientInstance.this.adjustThreadPool();//每分钟调整一次执行业务的线程池大小。但是处于[20,64]区间内
                 } catch (Exception e) {
                     log.error("ScheduledTask adjustThreadPool exception", e);
                 }
@@ -571,7 +571,7 @@ public class MQClientInstance {
                         }
                     } else {
                         topicRouteData =
-                                this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
+                                this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);//从nameServer获取topic
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
@@ -991,7 +991,7 @@ public class MQClientInstance {
         boolean slave = false;
         boolean found = false;
 
-        HashMap<Long/* brokerId */, String/* address */> map = this.brokerAddrTable.get(brokerName);
+        HashMap<Long/* brokerId */, String/* address */> map = this.brokerAddrTable.get(brokerName);//一个brokerName可能对应一主多从个broker
         if (map != null && !map.isEmpty()) {
             brokerAddr = map.get(brokerId);
             slave = (brokerId != MixAll.MASTER_ID);
@@ -1031,7 +1031,7 @@ public class MQClientInstance {
         return null;
     }
 
-
+    //一个topic可能在多个broker上，当然也可能不在任何broker上
     public String findBrokerAddrByTopic(final String topic) {
         TopicRouteData topicRouteData = this.topicRouteTable.get(topic);
         if (topicRouteData != null) {

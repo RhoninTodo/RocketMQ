@@ -175,6 +175,7 @@ public interface MessageStore {
 
     /**
      * Slave落后Master多少，单位字节
+     * 从方法实现上看，每个broker只支持一主一从
      */
     public long slaveFallBehindMuch();
 

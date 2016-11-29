@@ -76,10 +76,10 @@ public class IndexService extends ServiceThread {
             for (File file : files) {
                 try {
                     IndexFile f = new IndexFile(file.getPath(), this.hashSlotNum, this.indexNum, 0, 0);
-                    f.load();
+                    f.load();//仅仅load了IndexHeader，并没有加载IndexFile中的索引数据
 
-                    if (!lastExitOK) {
-                        if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint()
+                    if (!lastExitOK) { //非安全退出的时间点 所在的索引文件删除掉
+                        if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint() //commit log会根据storeCheckPoint重建索引
                             .getIndexMsgTimestamp()) {
                             f.destroy(0);
                             continue;
@@ -194,14 +194,14 @@ public class IndexService extends ServiceThread {
             if (!this.indexFileList.isEmpty()) {
                 for (int i = this.indexFileList.size(); i > 0; i--) {
                     IndexFile f = this.indexFileList.get(i - 1);
-                    boolean lastFile = (i == this.indexFileList.size());
+                    boolean lastFile = (i == this.indexFileList.size());//是否是最后一个IndexFile
                     if (lastFile) {
                         indexLastUpdateTimestamp = f.getEndTimestamp();
                         indexLastUpdatePhyoffset = f.getEndPhyOffset();
                     }
 
                     if (f.isTimeMatched(begin, end)) {
-                        // 最后一个文件需要加锁
+                        // 最后一个文件需要加锁，∵run方法还要想其追加
                         f.selectPhyOffset(phyOffsets, this.buildKey(topic, key), maxNum, begin, end, lastFile);
                     }
 
@@ -268,9 +268,9 @@ public class IndexService extends ServiceThread {
 
     public void buildIndex(Object[] req) {
         boolean breakdown = false;
-        IndexFile indexFile = retryGetAndCreateIndexFile();
+        IndexFile indexFile = retryGetAndCreateIndexFile();//别被方法名唬，其实是获取lastFile
         if (indexFile != null) {
-            long endPhyOffset = indexFile.getEndPhyOffset();
+            long endPhyOffset = indexFile.getEndPhyOffset();//commit log最后的偏移
             MSG_WHILE: for (Object o : req) {
                 DispatchRequest msg = (DispatchRequest) o;
                 String topic = msg.getTopic();
@@ -286,15 +286,15 @@ public class IndexService extends ServiceThread {
                     break;
                 case MessageSysFlag.TransactionCommitType:
                 case MessageSysFlag.TransactionRollbackType:
-                    continue;
+                    continue;//剔除commitType或者rollbackType消息，因为这两种消息都有对应的preparedType的消息
                 }
 
                 if (keys != null && keys.length() > 0) {
-                    String[] keyset = keys.split(MessageConst.KEY_SEPARATOR);
+                    String[] keyset = keys.split(MessageConst.KEY_SEPARATOR);//一个请求可以有很多个key? 这个key是啥
                     for (String key : keyset) {
                         // TODO 是否需要TRIM
                         if (key.length() > 0) {
-                            for (boolean ok =
+                            for (boolean ok = //用for()是为了装逼吗？ <=> do{ok=buildKey();...}; while(!ok)
                                     indexFile.putKey(buildKey(topic, key), msg.getCommitLogOffset(),
                                         msg.getStoreTimestamp()); !ok;) {
                                 log.warn("index file full, so create another one, " + indexFile.getFileName());
@@ -400,7 +400,7 @@ public class IndexService extends ServiceThread {
 
             // 每创建一个新文件，之前文件要刷盘
             if (indexFile != null) {
-                final IndexFile flushThisFile = prevIndexFile;
+                final IndexFile flushThisFile = prevIndexFile;//仅刷前一个文件
                 Thread flushThread = new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -427,11 +427,11 @@ public class IndexService extends ServiceThread {
             indexMsgTimestamp = f.getEndTimestamp();
         }
 
-        f.flush();
+        f.flush();//刷索引文件
 
         if (indexMsgTimestamp > 0) {
             this.defaultMessageStore.getStoreCheckpoint().setIndexMsgTimestamp(indexMsgTimestamp);
-            this.defaultMessageStore.getStoreCheckpoint().flush();
+            this.defaultMessageStore.getStoreCheckpoint().flush();//还要刷检查点文件
         }
     }
 

@@ -95,7 +95,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
-                    ConsumeMessageOrderlyService.this.lockMQPeriodically();
+                    ConsumeMessageOrderlyService.this.lockMQPeriodically();//请求锁住rebalance分配给我的queues，1次/s
                 }
             }, 1000 * 1, ProcessQueue.RebalanceLockInterval, TimeUnit.MILLISECONDS);
         }
@@ -158,7 +158,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
         private final ProcessQueue processQueue;
         private final MessageQueue messageQueue;
 
-
+        //每针对一个queue就有这么一个Thread。所以业务线程池∈[20,64]，与RebalanceImpl中processQueueTable.size=64相互印证
         public ConsumeRequest(ProcessQueue processQueue, MessageQueue messageQueue) {
             this.processQueue = processQueue;
             this.messageQueue = messageQueue;
@@ -173,11 +173,11 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                 return;
             }
 
-            final Object objLock = messageQueueLock.fetchLockObject(this.messageQueue);
+            final Object objLock = messageQueueLock.fetchLockObject(this.messageQueue);//不同的业务线程是有可能处理一个messageQueue的
             synchronized (objLock) {
                 if (MessageModel.BROADCASTING
                     .equals(ConsumeMessageOrderlyService.this.defaultMQPushConsumerImpl.messageModel())
-                        || (this.processQueue.isLocked() && !this.processQueue.isLockExpired())) {
+                        || (this.processQueue.isLocked() && !this.processQueue.isLockExpired())) {//顺序消费不太可能又是广播消费~~
                     final long beginTime = System.currentTimeMillis();
                     for (boolean continueConsume = true; continueConsume;) {
                         if (this.processQueue.isDropped()) {
@@ -214,7 +214,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                             break;
                         }
 
-                        final int consumeBatchSize =
+                        final int consumeBatchSize =//默认1
                                 ConsumeMessageOrderlyService.this.defaultMQPushConsumer
                                     .getConsumeMessageBatchMaxSize();
 
@@ -240,8 +240,8 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
 
                             long beginTimestamp = System.currentTimeMillis();
 
-                            try {
-                                this.processQueue.getLockConsume().lock();
+                            try {//一个messageQueue可能对应多个processQueue？
+                                this.processQueue.getLockConsume().lock();//前面已经锁了messageQueue，这里还要锁processQueue
                                 if (this.processQueue.isDropped()) {
                                     log.warn(
                                         "consumeMessage, the message queue not be able to consume, because it's dropped. {}",
@@ -308,7 +308,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                     }
 
                     ConsumeMessageOrderlyService.this.tryLockLaterAndReconsume(this.messageQueue,
-                        this.processQueue, 100);
+                        this.processQueue, 100);//过一会重新向broker的master请求该queue的锁
                 }
             }
         }
@@ -336,7 +336,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
         if (context.isAutoCommit()) {
             switch (status) {
             case COMMIT:
-            case ROLLBACK:
+            case ROLLBACK://自动提交并不支持commit和rollback命令
                 log.warn(
                     "the message queue consume result is illegal, we think you want to ack these message {}",
                     consumeRequest.getMessageQueue());

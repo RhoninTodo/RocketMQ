@@ -64,16 +64,17 @@ public class AllocateMessageQueueAveragely implements AllocateMessageQueueStrate
             return result;
         }
 
+        //以下类似于分页算法，但有一些不同。根据该consumer在consumer队列的位置，计算你应该消费queues中的哪些queue。
         int index = cidAll.indexOf(currentCID);
         int mod = mqAll.size() % cidAll.size();
-        int averageSize =
+        int averageSize = //如果队列数 < 消费者数量，每个消费者消费1个队列；
                 mqAll.size() <= cidAll.size() ? 1 : (mod > 0 && index < mod ? mqAll.size() / cidAll.size()
-                        + 1 : mqAll.size() / cidAll.size());
-        int startIndex = (mod > 0 && index < mod) ? index * averageSize : index * averageSize + mod;
-        int range = Math.min(averageSize, mqAll.size() - startIndex);
+                        + 1 : mqAll.size() / cidAll.size());//队列数 > 消费者，不能整除，前mod个消费者会多消费一个队列；整除就都一样了
+        int startIndex = (mod > 0 && index < mod) ? index * averageSize : index * averageSize + mod;//相当于页起始
+        int range = Math.min(averageSize, mqAll.size() - startIndex);//相当于页大小
         for (int i = 0; i < range; i++) {
             result.add(mqAll.get((startIndex + i) % mqAll.size()));
         }
-        return result;
+        return result;//返回页数据，也就是本consumer应该消费的那些queue
     }
 }

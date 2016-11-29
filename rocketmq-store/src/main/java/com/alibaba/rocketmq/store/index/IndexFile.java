@@ -40,14 +40,14 @@ public class IndexFile {
     private static int HASH_SLOT_SIZE = 4;
     private static int INDEX_SIZE = 20;
     private static int INVALID_INDEX = 0;
-    private final int hashSlotNum;
-    private final int indexNum;
+    private final int hashSlotNum; // hash槽数，相当于hash桶大小，默认500w
+    private final int indexNum; // 能存储索引的数量
     private final MapedFile mapedFile;
     private final FileChannel fileChannel;
     private final MappedByteBuffer mappedByteBuffer;
     private final IndexHeader indexHeader;
 
-
+    //IndexFile分成了三个区：Header(40) + slots(500w*4) + indexs(num*20)
     public IndexFile(final String fileName, final int hashSlotNum, final int indexNum,
             final long endPhyOffset, final long endTimestamp) throws IOException {
         int fileTotalSize =
@@ -112,7 +112,7 @@ public class IndexFile {
      */
     public boolean putKey(final String key, final long phyOffset, final long storeTimestamp) {
         if (this.indexHeader.getIndexCount() < this.indexNum) {
-            int keyHash = indexKeyHashMethod(key);
+            int keyHash = indexKeyHashMethod(key);//冲突的索引会被链接到Next_Index_Offset(4bytes)
             int slotPos = keyHash % this.hashSlotNum;
             int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * HASH_SLOT_SIZE;
 
@@ -122,7 +122,7 @@ public class IndexFile {
                 // TODO 是否是读写锁
                 // fileLock = this.fileChannel.lock(absSlotPos, HASH_SLOT_SIZE,
                 // false);
-                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);
+                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);//put前slot上是否有值，有值=值，没值=0
                 if (slotValue <= INVALID_INDEX || slotValue > this.indexHeader.getIndexCount()) {
                     slotValue = INVALID_INDEX;
                 }
@@ -145,16 +145,16 @@ public class IndexFile {
 
                 int absIndexPos =
                         IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * HASH_SLOT_SIZE
-                                + this.indexHeader.getIndexCount() * INDEX_SIZE;
+                                + this.indexHeader.getIndexCount() * INDEX_SIZE;// IndexCount是自增的
 
                 // 写入真正索引
                 this.mappedByteBuffer.putInt(absIndexPos, keyHash);
                 this.mappedByteBuffer.putLong(absIndexPos + 4, phyOffset);
                 this.mappedByteBuffer.putInt(absIndexPos + 4 + 8, (int) timeDiff);
-                this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue);
+                this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue);//解决hash冲突，前一个相同hash的索引被链接到4byte上
 
                 // 更新哈希槽
-                this.mappedByteBuffer.putInt(absSlotPos, this.indexHeader.getIndexCount());
+                this.mappedByteBuffer.putInt(absSlotPos, this.indexHeader.getIndexCount());//将indexs区中的偏移放进hashCode(key)槽位置上
 
                 // 第一次写入
                 if (this.indexHeader.getIndexCount() <= 1) {
@@ -209,6 +209,8 @@ public class IndexFile {
 
     /**
      * 时间区间是否匹配
+     * 其实就是三种情况的并集 <=> [begin, end] ∩ [indexHeader.begin, indexHeader.end] != ∅
+     * suggest：end >= indexHead.begin && begin <= indexHeader.end <=> 也能保证必有交集
      */
     public boolean isTimeMatched(final long begin, final long end) {
         boolean result =
@@ -240,12 +242,14 @@ public class IndexFile {
     /**
      * 前提：入参时间区间在调用前已经匹配了当前索引文件的起始结束时间
      */
+    //IndexFile分成了三个区：Header(40) + slots(500w*4) + indexs(num*20)
+    //hashCode(key)找到对应的slot，用slot上的值去indexs区找索引数据。有点像innodb页结构，为什么要这样做？
     public void selectPhyOffset(final List<Long> phyOffsets, final String key, final int maxNum,
             final long begin, final long end, boolean lock) {
         if (this.mapedFile.hold()) {
-            int keyHash = indexKeyHashMethod(key);
-            int slotPos = keyHash % this.hashSlotNum;
-            int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * HASH_SLOT_SIZE;
+            int keyHash = indexKeyHashMethod(key);//String.hashCode()
+            int slotPos = keyHash % this.hashSlotNum;//该key在第几个slot上
+            int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * HASH_SLOT_SIZE;//在文件中的绝对偏移
 
             FileLock fileLock = null;
             try {
@@ -254,7 +258,7 @@ public class IndexFile {
                     // HASH_SLOT_SIZE, true);
                 }
 
-                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);
+                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);//槽上的值
                 // if (fileLock != null) {
                 // fileLock.release();
                 // fileLock = null;
@@ -270,15 +274,15 @@ public class IndexFile {
                             break;
                         }
 
-                        int absIndexPos =
+                        int absIndexPos = //找到index区的位置
                                 IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * HASH_SLOT_SIZE
                                         + nextIndexToRead * INDEX_SIZE;
 
                         int keyHashRead = this.mappedByteBuffer.getInt(absIndexPos);
                         long phyOffsetRead = this.mappedByteBuffer.getLong(absIndexPos + 4);
                         // int转为long，避免下面计算时间差值时溢出
-                        long timeDiff = (long) this.mappedByteBuffer.getInt(absIndexPos + 4 + 8);
-                        int prevIndexRead = this.mappedByteBuffer.getInt(absIndexPos + 4 + 8 + 4);
+                        long timeDiff = (long) this.mappedByteBuffer.getInt(absIndexPos + 4 + 8);//只是强转long，操作还是getInt，position+=4
+                        int prevIndexRead = this.mappedByteBuffer.getInt(absIndexPos + 4 + 8 + 4);//看build如何生成的
 
                         // 读到了未知数据
                         if (timeDiff < 0) {
@@ -291,7 +295,7 @@ public class IndexFile {
                         long timeRead = this.indexHeader.getBeginTimestamp() + timeDiff;
                         boolean timeMatched = (timeRead >= begin) && (timeRead <= end);
 
-                        if (keyHash == keyHashRead && timeMatched) {
+                        if (keyHash == keyHashRead && timeMatched) {//校验hash key，校验时间戳
                             phyOffsets.add(phyOffsetRead);
                         }
 
@@ -301,7 +305,7 @@ public class IndexFile {
                             break;
                         }
 
-                        nextIndexToRead = prevIndexRead;
+                        nextIndexToRead = prevIndexRead;//继续判断下一条索引
                     }
                 }
             }

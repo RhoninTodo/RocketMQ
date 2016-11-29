@@ -35,13 +35,13 @@ public class IndexHeader {
     private static int HASHSLOTCOUNT_INDEX = 32;
     private static int INDEXCOUNT_INDEX = 36;
     private final ByteBuffer byteBuffer;
-    private AtomicLong beginTimestamp = new AtomicLong(0);
+    private AtomicLong beginTimestamp = new AtomicLong(0);// 索引文件第一个索引消息落到broker的时间
     private AtomicLong endTimestamp = new AtomicLong(0);
-    private AtomicLong beginPhyOffset = new AtomicLong(0);
+    private AtomicLong beginPhyOffset = new AtomicLong(0);// 索引文件第一个索引消息commit log的偏移
     private AtomicLong endPhyOffset = new AtomicLong(0);
     private AtomicInteger hashSlotCount = new AtomicInteger(0);
     // 第一个索引是无效索引
-    private AtomicInteger indexCount = new AtomicInteger(1);
+    private AtomicInteger indexCount = new AtomicInteger(1);//第几个索引？
 
 
     public IndexHeader(final ByteBuffer byteBuffer) {

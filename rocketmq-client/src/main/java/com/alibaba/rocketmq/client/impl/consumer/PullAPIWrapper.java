@@ -127,9 +127,9 @@ public class PullAPIWrapper {
             List<MessageExt> msgListFilterAgain = msgList;
             if (!subscriptionData.getTagsSet().isEmpty() && !subscriptionData.isClassFilterMode()) {
                 msgListFilterAgain = new ArrayList<MessageExt>(msgList.size());
-                for (MessageExt msg : msgList) {
+                for (MessageExt msg : msgList) {//producor设置的tag，与consumer配置的tag匹配成功，才进一步处理。否则直接丢弃？
                     if (msg.getTags() != null) {
-                        if (subscriptionData.getTagsSet().contains(msg.getTags())) {
+                        if (subscriptionData.getTagsSet().contains(msg.getTags())) {//如果其他consumer需要消费被过滤的tag呢？
                             msgListFilterAgain.add(msg);
                         }
                     }
@@ -173,6 +173,7 @@ public class PullAPIWrapper {
         return pullResult;
     }
 
+    //前一次拉消息时，broker会传回建议的brokerId
     public long recalculatePullFromWhichNode(final MessageQueue mq) {
         if (this.isConnectBrokerByUser()) {
             return this.defaultBrokerId;
@@ -213,7 +214,7 @@ public class PullAPIWrapper {
         if (findBrokerResult != null) {
             int sysFlagInner = sysFlag;
 
-            if (findBrokerResult.isSlave()) {
+            if (findBrokerResult.isSlave()) {//从broker不需要COMMIT_OFFSET
                 sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);
             }
 
@@ -221,7 +222,7 @@ public class PullAPIWrapper {
             requestHeader.setConsumerGroup(this.consumerGroup);
             requestHeader.setTopic(mq.getTopic());
             requestHeader.setQueueId(mq.getQueueId());
-            requestHeader.setQueueOffset(offset);
+            requestHeader.setQueueOffset(offset);//参数4~7直接封进header中，broker会处理他们
             requestHeader.setMaxMsgNums(maxNums);
             requestHeader.setSysFlag(sysFlagInner);
             requestHeader.setCommitOffset(commitOffset);
@@ -231,7 +232,7 @@ public class PullAPIWrapper {
 
             String brokerAddr = findBrokerResult.getBrokerAddr();
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
-                brokerAddr = computPullFromWhichFilterServer(mq.getTopic(), brokerAddr);
+                brokerAddr = computPullFromWhichFilterServer(mq.getTopic(), brokerAddr);//纯随机
             }
 
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(//

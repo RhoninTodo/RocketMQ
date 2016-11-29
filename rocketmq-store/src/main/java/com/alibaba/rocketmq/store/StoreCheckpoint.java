@@ -40,9 +40,9 @@ public class StoreCheckpoint {
     private final RandomAccessFile randomAccessFile;
     private final FileChannel fileChannel;
     private final MappedByteBuffer mappedByteBuffer;
-    private volatile long physicMsgTimestamp = 0;
-    private volatile long logicsMsgTimestamp = 0;
-    private volatile long indexMsgTimestamp = 0;
+    private volatile long physicMsgTimestamp = 0;//commitLog最后刷盘的时间
+    private volatile long logicsMsgTimestamp = 0;//consumeQueue最终刷盘的时间
+    private volatile long indexMsgTimestamp = 0;//索引最终刷盘时间
 
 
     public StoreCheckpoint(final String scpPath) throws IOException {
@@ -56,7 +56,7 @@ public class StoreCheckpoint {
 
         if (fileExists) {
             log.info("store checkpoint file exists, " + scpPath);
-            this.physicMsgTimestamp = this.mappedByteBuffer.getLong(0);
+            this.physicMsgTimestamp = this.mappedByteBuffer.getLong(0);//checkpoint文件就存了三个long数
             this.logicsMsgTimestamp = this.mappedByteBuffer.getLong(8);
             this.indexMsgTimestamp = this.mappedByteBuffer.getLong(16);
 
