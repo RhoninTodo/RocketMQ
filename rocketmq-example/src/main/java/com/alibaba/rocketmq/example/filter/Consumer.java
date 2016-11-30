@@ -32,7 +32,7 @@ public class Consumer {
         /**
          * 使用Java代码，在服务器做消息过滤
          */
-        consumer.subscribe("TopicFilter7", MessageFilterImpl.class.getCanonicalName());
+        consumer.subscribe("TopicFilter7", MessageFilterImpl1.class.getCanonicalName());
 
         consumer.registerMessageListener(new MessageListenerConcurrently() {
 

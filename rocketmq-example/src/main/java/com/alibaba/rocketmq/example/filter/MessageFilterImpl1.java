@@ -4,7 +4,7 @@ import com.alibaba.rocketmq.common.filter.MessageFilter;
 import com.alibaba.rocketmq.common.message.MessageExt;
 
 
-public class MessageFilterImpl implements MessageFilter {
+public class MessageFilterImpl1 implements MessageFilter {
 
     @Override
     public boolean match(MessageExt msg) {

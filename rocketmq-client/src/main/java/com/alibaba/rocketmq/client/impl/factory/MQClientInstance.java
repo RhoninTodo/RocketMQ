@@ -505,7 +505,7 @@ public class MQClientInstance {
         return heartbeatData;
     }
 
-
+    //update所有topic的发布订阅关系
     public void updateTopicRouteInfoFromNameServer() {
         Set<String> topicList = new HashSet<String>();
 
