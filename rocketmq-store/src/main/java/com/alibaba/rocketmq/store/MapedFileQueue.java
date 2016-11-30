@@ -224,7 +224,7 @@ public class MapedFileQueue {
         {
             this.readWriteLock.readLock().lock();
             if (this.mapedFiles.isEmpty()) {
-                createOffset = startOffset - (startOffset % this.mapedFileSize);
+                createOffset = startOffset - (startOffset % this.mapedFileSize);//计算文件起始的偏移
             }
             else {
                 mapedFileLast = this.mapedFiles.get(this.mapedFiles.size() - 1);
@@ -236,8 +236,8 @@ public class MapedFileQueue {
             createOffset = mapedFileLast.getFileFromOffset() + this.mapedFileSize;
         }
 
-        if (createOffset != -1) {
-            String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);//新建一个MapedFile
+        if (createOffset != -1) {//需要新建一个MapedFile
+            String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);//起始偏移就是文件名
             String nextNextFilePath =
                     this.storePath + File.separator
                             + UtilAll.offset2FileName(createOffset + this.mapedFileSize);//再新建一个MapedFile，相当于预分配

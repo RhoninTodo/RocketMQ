@@ -505,7 +505,8 @@ public class MQClientInstance {
         return heartbeatData;
     }
 
-    //update所有topic的发布订阅关系
+
+    //update所有topic对应的ConsumeQueue，topic是从consumerTable或producerTable取得的
     public void updateTopicRouteInfoFromNameServer() {
         Set<String> topicList = new HashSet<String>();
 
@@ -570,7 +571,7 @@ public class MQClientInstance {
                             }
                         }
                     } else {
-                        topicRouteData =
+                        topicRouteData = //包含了topic对应哪些broker，哪些queue。一个broker上可能有多个queue
                                 this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);//从nameServer获取topic
                     }
                     if (topicRouteData != null) {
@@ -589,6 +590,8 @@ public class MQClientInstance {
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
+
+                            //name server返回给client的信息TopicRouteData.list<ConsumeQueue>，producer和consumer要区分对待。主要体现在读写权限
 
                             // Update Pub info
                             {
@@ -666,7 +669,7 @@ public class MQClientInstance {
                                                                    final TopicRouteData route) {
         TopicPublishInfo info = new TopicPublishInfo();
         if (route.getOrderTopicConf() != null && route.getOrderTopicConf().length() > 0) {
-            String[] brokers = route.getOrderTopicConf().split(";");
+            String[] brokers = route.getOrderTopicConf().split(";");//"broker-1:2;broker-2:3;broker-3:2" -- "brokerName:该topic对应queue的数量;"
             for (String broker : brokers) {
                 String[] item = broker.split(":");
                 int nums = Integer.parseInt(item[1]);
@@ -680,7 +683,7 @@ public class MQClientInstance {
         }
         else {
             List<QueueData> qds = route.getQueueDatas();
-            Collections.sort(qds);
+            Collections.sort(qds);//按brokerName排序
             for (QueueData qd : qds) {
                 if (PermName.isWriteable(qd.getPerm())) {
                     BrokerData brokerData = null;
@@ -695,7 +698,7 @@ public class MQClientInstance {
                         continue;
                     }
 
-                    if (!brokerData.getBrokerAddrs().containsKey(MixAll.MASTER_ID)) {
+                    if (!brokerData.getBrokerAddrs().containsKey(MixAll.MASTER_ID)) {//producer只能往master broker上发布消息
                         continue;
                     }
 

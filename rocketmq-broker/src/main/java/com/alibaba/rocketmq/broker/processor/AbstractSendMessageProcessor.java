@@ -177,7 +177,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
 		// 妫�鏌roker鏉冮檺, 椤哄簭娑堟伅绂佸啓锛涢潪椤哄簭娑堟伅閫氳繃 nameserver 閫氱煡瀹㈡埛绔墧闄ょ鍐欏垎鍖�
         if (!PermName.isWriteable(this.brokerController.getBrokerConfig().getBrokerPermission())
                 && this.brokerController.getTopicConfigManager().isOrderTopic(requestHeader.getTopic())) {
-            response.setCode(ResponseCode.NO_PERMISSION);
+            response.setCode(ResponseCode.NO_PERMISSION);//broker禁止写入&&broker为queue排序
             response.setRemark("the broker[" + this.brokerController.getBrokerConfig().getBrokerIP1()
                     + "] sending message is forbidden");
             return response;
@@ -187,7 +187,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
             String errorMsg =
                     "the topic[" + requestHeader.getTopic() + "] is conflict with system reserved words.";
             log.warn(errorMsg);
-            response.setCode(ResponseCode.SYSTEM_ERROR);
+            response.setCode(ResponseCode.SYSTEM_ERROR);//topic name校验，不能为defaulTopic和clusterName
             response.setRemark(errorMsg);
             return response;
         }

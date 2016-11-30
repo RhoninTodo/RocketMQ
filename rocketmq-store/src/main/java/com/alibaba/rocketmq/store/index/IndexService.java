@@ -290,11 +290,11 @@ public class IndexService extends ServiceThread {
                 }
 
                 if (keys != null && keys.length() > 0) {
-                    String[] keyset = keys.split(MessageConst.KEY_SEPARATOR);//一个请求可以有很多个key? 这个key是啥
+                    String[] keyset = keys.split(MessageConst.KEY_SEPARATOR);//一个请求可以有很多个key? 这个key是啥 -- producer建立消息时确定，用于查询消息的关键词
                     for (String key : keyset) {
                         // TODO 是否需要TRIM
                         if (key.length() > 0) {
-                            for (boolean ok = //用for()是为了装逼吗？ <=> do{ok=buildKey();...}; while(!ok)
+                            for (boolean ok = //装逼？ <=> do{ok=buildKey();...}; while(!ok)
                                     indexFile.putKey(buildKey(topic, key), msg.getCommitLogOffset(),
                                         msg.getStoreTimestamp()); !ok;) {
                                 log.warn("index file full, so create another one, " + indexFile.getFileName());

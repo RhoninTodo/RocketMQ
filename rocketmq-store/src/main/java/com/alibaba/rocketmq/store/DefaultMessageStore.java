@@ -1601,12 +1601,12 @@ public class DefaultMessageStore implements MessageStore {
             int requestsWriteSize = 0;
             int putMsgIndexHightWater =
                     DefaultMessageStore.this.getMessageStoreConfig().getPutMsgIndexHightWater();
-            synchronized (this) {
+            synchronized (this) { //pair.getObject2是一个ExecutorService线程池，add还是需要同步
                 this.requestsWrite.add(dispatchRequest);//放入写队列
                 requestsWriteSize = this.requestsWrite.size();
                 if (!this.hasNotified) {
                     this.hasNotified = true;
-                    this.notify();
+                    this.notify();//唤醒DispatchMessageService
                 }
             }
 
@@ -1628,6 +1628,8 @@ public class DefaultMessageStore implements MessageStore {
         }
 
 
+        // 为什么要调换读写队列的引用？
+        // putRequest是线程池，所以requestsWrite有synchronized控制；run是单线程，读写队列分开就不需要加锁了，而doDispatch和swap是一个线程，不会有问题
         private void swapRequests() {
             List<DispatchRequest> tmp = this.requestsWrite;
             this.requestsWrite = this.requestsRead;
@@ -1636,8 +1638,8 @@ public class DefaultMessageStore implements MessageStore {
 
 
         private void doDispatch() {
-            if (!this.requestsRead.isEmpty()) {
-                for (DispatchRequest req : this.requestsRead) {//线程从读队列里取request，哪里做了swap转换？
+            if (!this.requestsRead.isEmpty()) {//线程从读队列里取request
+                for (DispatchRequest req : this.requestsRead) {//哪里swap的？ -- run方法doDispatch前会wait(0)，被putRequest的notify后的钩子onWaitEnd
 
                     final int tranType = MessageSysFlag.getTransactionValue(req.getSysFlag());
                     // 1、分发消息位置信息到ConsumeQueue
@@ -1650,7 +1652,7 @@ public class DefaultMessageStore implements MessageStore {
                             req.getStoreTimestamp(), req.getConsumeQueueOffset());
                         break;
                     case MessageSysFlag.TransactionPreparedType:
-                    case MessageSysFlag.TransactionRollbackType:
+                    case MessageSysFlag.TransactionRollbackType://不需要consume queue更新
                         break;
                     }
                 }
@@ -1696,7 +1698,7 @@ public class DefaultMessageStore implements MessageStore {
 
 
         @Override
-        protected void onWaitEnd() {
+        protected void onWaitEnd() {//被唤醒后调用
             this.swapRequests();
         }
 

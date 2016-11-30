@@ -302,7 +302,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             log.debug("receive SendMessage request command, " + request);
         }
         response.setCode(-1);
-        super.msgCheck(ctx, requestHeader, response);
+        super.msgCheck(ctx, requestHeader, response);//校验了很多东西
         if (response.getCode()!=-1) {
 			return response;
 		}
@@ -310,7 +310,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         final byte[] body = request.getBody();
         
-        int queueIdInt = requestHeader.getQueueId();
+        int queueIdInt = requestHeader.getQueueId();//写队列producer已经负载均衡过了
         TopicConfig topicConfig =
                 this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
         // 随机指定一个队列
@@ -427,7 +427,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                     mqtraceContext.setQueueId(responseHeader.getQueueId());
                     mqtraceContext.setQueueOffset(responseHeader.getQueueOffset());
                 }
-                return null;
+                return null;//正确流程返回null。错误返回response，由外层Remoting回写response
             }
         }
         else {

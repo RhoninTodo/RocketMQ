@@ -5,9 +5,9 @@ package com.alibaba.rocketmq.common.protocol.route;
 
 public class QueueData implements Comparable<QueueData> {
     private String brokerName;
-    private int readQueueNums;
-    private int writeQueueNums;
-    private int perm;
+    private int readQueueNums;//针对订阅队列的消费者
+    private int writeQueueNums;//针对发布队列的生产者
+    private int perm;//权限
     private int topicSynFlag;
 
 

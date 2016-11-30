@@ -491,7 +491,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             int times = 0;
             String[] brokersSent = new String[timesTotal];
             for (; times < timesTotal && (endTimestamp - beginTimestamp) < maxTimeout; times++) {
-                String lastBrokerName = null == mq ? null : mq.getBrokerName();
+                String lastBrokerName = null == mq ? null : mq.getBrokerName();//只有第一次循环时，是null
                 MessageQueue tmpmq = topicPublishInfo.selectOneMessageQueue(lastBrokerName);
                 if (tmpmq != null) {
                     mq = tmpmq;
@@ -591,8 +591,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {
-            this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
-            this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
+            this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());//为什么put个空值？--topicPublishInfoTable中目前没有topic的key
+            this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);//task线程会根据topicPublishInfoTable的keyset逐个更新每个topic
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
         }
 

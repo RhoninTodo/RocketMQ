@@ -545,7 +545,7 @@ public class CommitLog {
                 break;
             case END_OF_FILE:
                 // Create a new file, re-write the message
-                mapedFile = this.mapedFileQueue.getLastMapedFile();
+                mapedFile = this.mapedFileQueue.getLastMapedFile();//这是第二次getLastFile了，不出异常一定能get到
                 if (null == mapedFile) {
                     // XXX: warn and notify me
                     log.error("create maped file2 error, topic: " + msg.getTopic() + " clientAddr: "
@@ -569,7 +569,7 @@ public class CommitLog {
                 result.getWroteBytes(),// 4
                 tagsCode,// 5
                 msg.getStoreTimestamp(),// 6
-                result.getLogicsOffset(),// 7 -- 该条消息对应的consume queue的写偏移位置。每增1，对应20Bytes
+                result.getLogicsOffset(),// 7 -- 该条消息对应的consume queue的写偏移位置，每增1对应20Bytes。prepare和rollback为0
                 msg.getKeys(),// 8
                 /**
                  * Transaction
@@ -577,7 +577,7 @@ public class CommitLog {
                 msg.getSysFlag(),// 9
                 msg.getPreparedTransactionOffset());// 10
 
-            this.defaultMessageStore.putDispatchRequest(dispatchRequest);//分发至consume queue，通过defaultMessageStore.consumeQueueTable找关系
+            this.defaultMessageStore.putDispatchRequest(dispatchRequest);//分发至dispatchService进而追加到consumeQueue和index
 
             eclipseTimeInLock = this.defaultMessageStore.getSystemClock().now() - beginLockTimestamp;
         } // end of synchronized
@@ -615,9 +615,9 @@ public class CommitLog {
         }
         // Asynchronous flush
         else {
-            this.flushCommitLogService.wakeup();//异步分发consume queue、异步flush、双写slave，怎么同步？
+            this.flushCommitLogService.wakeup();//异步分发consume queue、异步flush磁盘、同步的双写slave，有问题吗？
         }
-        //i think：异步分发一定不会失败吗？异步flush可以不同步，即使mq宕了，只要物理机不宕就ok；下面双写是同步的
+        //i think：异步分发都是一台机器，一定不会失败、异步flush可以不同步，即使mq宕了，只要物理机不宕就ok、下面双写通过网络，同步求稳！
 
         // Synchronous write double
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
@@ -1003,7 +1003,7 @@ public class CommitLog {
             switch (tranType) {
             // Prepared and Rollback message is not consumed, will not enter the
             // consumer queue
-            case MessageSysFlag.TransactionPreparedType:
+            case MessageSysFlag.TransactionPreparedType://不需要加进consume queue，但是需要加进commit log
             case MessageSysFlag.TransactionRollbackType:
                 queueOffset = 0L;
                 break;
@@ -1118,12 +1118,12 @@ public class CommitLog {
 
             switch (tranType) {
             case MessageSysFlag.TransactionPreparedType:
-            case MessageSysFlag.TransactionRollbackType:
+            case MessageSysFlag.TransactionRollbackType://prepare和rollback不会增加consume queue的偏移指针
                 break;
             case MessageSysFlag.TransactionNotType:
             case MessageSysFlag.TransactionCommitType:
                 // The next update ConsumeQueue information
-                CommitLog.this.topicQueueTable.put(key, ++queueOffset);//插入commit log的数据属于的consume queue偏移自增，用于后面dispatch定位
+                CommitLog.this.topicQueueTable.put(key, ++queueOffset);//插入消息属于哪个consume queue偏移自增，用于后面dispatch定位
                 break;
             default:
                 break;
