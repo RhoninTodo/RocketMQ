@@ -458,7 +458,7 @@ public class MapedFileQueue {
     public MapedFile findMapedFileByOffset(final long offset, final boolean returnFirstOnNotFound) {
         try {
             this.readWriteLock.readLock().lock();
-            MapedFile mapedFile = this.getFirstMapedFile();
+            MapedFile mapedFile = this.getFirstMapedFile();//第一个MapedFile起始偏移不一定是0。所以index是要减去firstMapedFile的
 
             if (mapedFile != null) {
                 int index =

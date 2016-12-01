@@ -635,7 +635,7 @@ public class CommitLog {
                     boolean flushOK =
                     // TODO
                             request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig()
-                                .getSyncFlushTimeout());
+                                .getSyncFlushTimeout());//5s
                     if (!flushOK) {
                         log.error("do sync transfer other node, wait return, but failed, topic: "
                                 + msg.getTopic() + " tags: " + msg.getTags() + " client address: "
@@ -837,10 +837,11 @@ public class CommitLog {
         }
 
 
+        //flushOK=false,await没超时？--不会发生这种情况，这里wait(5s)，GroupTransferService尝试5次，1s/次。这么写很烂
         public boolean waitForFlush(long timeout) {
             try {
-                boolean result = this.countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
-                return result || this.flushOK;
+                boolean result = this.countDownLatch.await(timeout, TimeUnit.MILLISECONDS);//countDown前超时了返回false
+                return result || this.flushOK;//如果超时的话，flushOK一般也是false
             }
             catch (InterruptedException e) {
                 e.printStackTrace();

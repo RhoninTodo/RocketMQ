@@ -180,7 +180,7 @@ public class MQClientInstance {
                     //Start various schedule tasks
                     this.startScheduledTask();
                     //Start pull service
-                    this.pullMessageService.start();
+                    this.pullMessageService.start();//启动长轮询服务
                     //Start rebalance service
                     this.rebalanceService.start();
                     //Start push service

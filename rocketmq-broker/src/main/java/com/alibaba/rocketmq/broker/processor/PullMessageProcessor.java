@@ -268,7 +268,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 return response;
             }
 
-            subscriptionData = consumerGroupInfo.findSubscriptionData(requestHeader.getTopic());
+            subscriptionData = consumerGroupInfo.findSubscriptionData(requestHeader.getTopic());//heartbeat会注册订阅信息，一定能找到
             if (null == subscriptionData) {
                 log.warn("the consumer's subscription not exist, group: {}", requestHeader.getConsumerGroup());
                 response.setCode(ResponseCode.SUBSCRIPTION_NOT_EXIST);
@@ -289,7 +289,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
 
         final GetMessageResult getMessageResult =
                 this.brokerController.getMessageStore().getMessage(requestHeader.getConsumerGroup(),
-                    requestHeader.getTopic(), requestHeader.getQueueId(), requestHeader.getQueueOffset(),
+                    requestHeader.getTopic(), requestHeader.getQueueId(), requestHeader.getQueueOffset(),//consumer要拉取到的偏移
                     requestHeader.getMaxMsgNums(), subscriptionData);
         if (getMessageResult != null) {
             response.setRemark(getMessageResult.getStatus().name());
@@ -405,7 +405,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                     FileRegion fileRegion =
                             new ManyMessageTransfer(response.encodeHeader(getMessageResult
                                 .getBufferTotalSize()), getMessageResult);
-                    channel.writeAndFlush(fileRegion).addListener(new ChannelFutureListener() {
+                    channel.writeAndFlush(fileRegion).addListener(new ChannelFutureListener() { //已经将应答返回consumer
                         @Override
                         public void operationComplete(ChannelFuture future) throws Exception {
                             getMessageResult.release();

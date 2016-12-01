@@ -464,7 +464,7 @@ public class DefaultMessageStore implements MessageStore {
         // 枚举变量，取消息结果
         GetMessageStatus status = GetMessageStatus.NO_MESSAGE_IN_QUEUE;
         // 当被过滤后，返回下一次开始的Offset
-        long nextBeginOffset = offset;
+        long nextBeginOffset = offset;//这次拉取，要拉取到的终止位置。也就是下一次拉取的开始位置
         // 逻辑队列中的最小Offset
         long minOffset = 0;
         // 逻辑队列中的最大Offset
@@ -473,7 +473,7 @@ public class DefaultMessageStore implements MessageStore {
         GetMessageResult getResult = new GetMessageResult();
 
         // 有个读写锁，所以只访问一次，避免锁开销影响性能
-        final long maxOffsetPy = this.commitLog.getMaxOffset();
+        final long maxOffsetPy = this.commitLog.getMaxOffset();//commit log最后一个MapedFile写了多少偏移
 
         ConsumeQueue consumeQueue = findConsumeQueue(topic, queueId);
         if (consumeQueue != null) {
@@ -488,7 +488,7 @@ public class DefaultMessageStore implements MessageStore {
                 status = GetMessageStatus.OFFSET_TOO_SMALL;
                 nextBeginOffset = minOffset;
             }
-            else if (offset == maxOffset) {
+            else if (offset == maxOffset) {//要从maxOffset处拉取一条消息。maxOffset处在storeManager中是producer下一条消息要存储的位置，所以是溢出1条
                 status = GetMessageStatus.OFFSET_OVERFLOW_ONE;
                 nextBeginOffset = offset;
             }
@@ -502,7 +502,7 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
             else {
-                SelectMapedBufferResult bufferConsumeQueue = consumeQueue.getIndexBuffer(offset);
+                SelectMapedBufferResult bufferConsumeQueue = consumeQueue.getIndexBuffer(offset);//consumeQueue是逻辑队列
                 if (bufferConsumeQueue != null) {
                     try {
                         status = GetMessageStatus.NO_MATCHED_MESSAGE;
@@ -511,7 +511,7 @@ public class DefaultMessageStore implements MessageStore {
                         long maxPhyOffsetPulling = 0;
 
                         int i = 0;
-                        final int MaxFilterMessageCount = 16000;
+                        final int MaxFilterMessageCount = 16000;//16000/20=800，for()不超过800条
                         boolean diskFallRecorded = false;
                         for (; i < bufferConsumeQueue.getSize() && i < MaxFilterMessageCount; i +=
                                 ConsumeQueue.CQStoreUnitSize) {
@@ -538,7 +538,7 @@ public class DefaultMessageStore implements MessageStore {
                             // 消息过滤
                             if (this.messageFilter.isMessageMatched(subscriptionData, tagsCode)) {
                                 SelectMapedBufferResult selectResult =
-                                        this.commitLog.getMessage(offsetPy, sizePy);
+                                        this.commitLog.getMessage(offsetPy, sizePy);//用consumeQueue中索引去conmmitLog中查找真实消息
                                 if (selectResult != null) {
                                     this.storeStatsService.getGetMessageTransferedMsgCount()
                                         .incrementAndGet();
@@ -1912,8 +1912,9 @@ public class DefaultMessageStore implements MessageStore {
     }
 
 
+    //目标消息和当前最大消息的内存差，如果>配置，则去硬盘里找
     private boolean checkInDiskByCommitOffset(long offsetPy, long maxOffsetPy) {
-        long memory =
+        long memory = //使用的内存占最大物理内存的n%
                 (long) (StoreUtil.TotalPhysicalMemorySize * (this.messageStoreConfig
                     .getAccessMessageInMemoryMaxRatio() / 100.0));
         return (maxOffsetPy - offsetPy) > memory;

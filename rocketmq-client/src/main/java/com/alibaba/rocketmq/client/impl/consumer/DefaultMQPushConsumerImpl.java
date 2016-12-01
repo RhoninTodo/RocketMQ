@@ -327,7 +327,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             return;
         }
 
-        //consumer被挂起，稍后重新put进pullRequestQueue，run会再拉出来溜一圈
+        //consumer被挂起，稍后重新put进pullRequestQueue，run()再拉出来溜一圈
         if (this.isPause()) {
             log.warn("consumer was paused, execute pull request later. instanceName={}",
                 this.defaultMQPushConsumer.getInstanceName());
@@ -491,7 +491,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         if (MessageModel.CLUSTERING == this.defaultMQPushConsumer.getMessageModel()) {
             commitOffsetValue =
                     this.offsetStore.readOffset(pullRequest.getMessageQueue(),
-                        ReadOffsetType.READ_FROM_MEMORY);//queue的消费位置。应该是缓存队列processQueue的消费位置，业务消费是从processQueue里拿
+                        ReadOffsetType.READ_FROM_MEMORY);//queue的消费位置。同时也是缓存队列processQueue的真正消费位置，业务消费是从processQueue里拿
             if (commitOffsetValue > 0) {
                 commitOffsetEnable = true;
             }
@@ -523,7 +523,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 pullRequest.getNextOffset(), // 4    broker中这次拉取的位置，上次拉取回调更新该值
                 this.defaultMQPushConsumer.getPullBatchSize(), // 5
                 sysFlag, // 6
-                commitOffsetValue,// 7      真正消费完的位置，缓存队列中不一定都能消费完。是<参数4的
+                commitOffsetValue,// 7      真正消费完的位置，缓存队列中不一定都能消费完，broker可能要保存它。是<参数4的
                 BrokerSuspendMaxTimeMillis, // 8
                 ConsumerTimeoutMillisWhenSuspend, // 9
                 CommunicationMode.ASYNC, // 10

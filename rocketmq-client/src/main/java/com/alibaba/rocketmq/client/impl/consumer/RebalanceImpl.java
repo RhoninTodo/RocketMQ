@@ -360,7 +360,7 @@ public abstract class RebalanceImpl {
         boolean changed = false;
 
         Iterator<Entry<MessageQueue, ProcessQueue>> it = this.processQueueTable.entrySet().iterator();
-        while (it.hasNext()) {//只是想遍历本地所有的MessageQueue，从processQueueTable取只是方便？
+        while (it.hasNext()) {//只是想遍历本地所有的MessageQueue，好像只有processQueueTable能取到
             Entry<MessageQueue, ProcessQueue> next = it.next();
             MessageQueue mq = next.getKey();
             ProcessQueue pq = next.getValue();
@@ -416,7 +416,7 @@ public abstract class RebalanceImpl {
             }
         }
 
-        this.dispatchPullRequest(pullRequestList);//新加入的queue执行立即拉取
+        this.dispatchPullRequest(pullRequestList);//新加入的queue执行立即拉取。第一次的拉取动作也是这里触发的！
 
         return changed;
     }

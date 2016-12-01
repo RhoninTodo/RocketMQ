@@ -70,7 +70,7 @@ public class HAConnection {
      */
 
     public void start() {
-        this.readSocketService.start();
+        this.readSocketService.start();//针对每一个slave都要起一对读写线程
         this.writeSocketService.start();
     }
 
@@ -194,11 +194,14 @@ public class HAConnection {
                         // 接收Slave上传的offset
                         if ((this.byteBufferRead.position() - this.processPostion) >= 8) {
                             int pos = this.byteBufferRead.position() - (this.byteBufferRead.position() % 8);
-                            long readOffset = this.byteBufferRead.getLong(pos - 8);//拿byteBufferRead最后一个8byte对其的long
+                            long readOffset = this.byteBufferRead.getLong(pos - 8);//拿byteBufferRead最后一个8byte向下对齐的前一个long
                             this.processPostion = pos;
+                            //上面一坨代码相当于黏包拆包！！！但是不稳，8<= readSize <=16才稳，不控制<=16会造成业务上的丢包
 
                             // 处理Slave的请求
-                            HAConnection.this.slaveAckOffset = readOffset;//貌似就是slave双写CommitLog的offset成功后，返回这个偏移
+                            HAConnection.this.slaveAckOffset = readOffset;//slave双写CommitLog的offset成功后，返回这个偏移
+                            //这行证明了master不在乎丢包，只要拿到slave最后写成功的offset就没问题。HAConnection.this.slaveAckOffset只是一个状态量
+
                             if (HAConnection.this.slaveRequestOffset < 0) {
                                 HAConnection.this.slaveRequestOffset = readOffset;
                                 log.info("slave[" + HAConnection.this.clientAddr + "] request offset "
@@ -206,7 +209,7 @@ public class HAConnection {
                             }
 
                             // 通知前端线程
-                            HAConnection.this.haService.notifyTransferSome(HAConnection.this.slaveAckOffset);
+                            HAConnection.this.haService.notifyTransferSome(HAConnection.this.slaveAckOffset);//通知的是GroupTransferService
                         }
                     }
                     else if (readSize == 0) {
@@ -301,7 +304,7 @@ public class HAConnection {
                                 + HAConnection.this.slaveRequestOffset);
                     }
 
-                    if (this.lastWriteOver) {
+                    if (this.lastWriteOver) {//上个请求全部写进buffer了
                         // 如果长时间没有发消息则尝试发心跳
                         long interval =
                                 HAConnection.this.haService.getDefaultMessageStore().getSystemClock().now()
@@ -333,7 +336,7 @@ public class HAConnection {
                     // selectResult会赋值给this.selectMapedBufferResult，出现异常也会清理掉
                     SelectMapedBufferResult selectResult =
                             HAConnection.this.haService.getDefaultMessageStore().getCommitLogData(
-                                this.nextTransferFromWhere); //从commit log中取出数据，同步到slave
+                                this.nextTransferFromWhere); //从commit log中取出数据，貌似是从nextTransferFromWhere取到MapdFile文件尾
                     if (selectResult != null) {
                         int size = selectResult.getSize();
                         if (size > HAConnection.this.haService.getDefaultMessageStore()
@@ -359,7 +362,7 @@ public class HAConnection {
                         this.lastWriteOver = this.transferData();//这里可能写完成。去ReadSocketService看处理结果
                     }
                     else {
-                        // 没有数据，等待通知。这里就是CommitLog service.getWaitNotifyObject().wakeupAll()唤醒的
+                        // 没有未传送的数据，等待通知。这里就是CommitLog追加消息后，service.getWaitNotifyObject().wakeupAll()唤醒的
                         HAConnection.this.haService.getWaitNotifyObject().allWaitForRunning(100);
                     }
                 }

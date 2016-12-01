@@ -273,7 +273,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             break;
         }
 
-        long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());//被业务真正消费的才会记录到rbtree中
+        long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());//被业务真正消费的才会从rbtree中清除
         if (offset >= 0) {//更新内存中的消费位置
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(),
                 offset, true);

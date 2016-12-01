@@ -77,7 +77,7 @@ public class RemotingUtil {
         // 在linux平台，尽量启用epoll实现
         if (isLinuxPlatform()) {
             try {
-                final Class<?> providerClazz = Class.forName("sun.nio.ch.EPollSelectorProvider");
+                final Class<?> providerClazz = Class.forName("sun.nio.ch.EPollSelectorProvider");//jdk nio好像有空轮询bug
                 if (providerClazz != null) {
                     try {
                         final Method method = providerClazz.getMethod("provider");

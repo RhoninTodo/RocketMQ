@@ -298,10 +298,10 @@ public class HAService {
             if (!this.requestsRead.isEmpty()) {
                 for (GroupCommitRequest req : this.requestsRead) {
                     boolean transferOK = HAService.this.push2SlaveMaxOffset.get() >= req.getNextOffset();//完成依据：推送到slave偏移≥要推消息的偏移
-                    for (int i = 0; !transferOK && i < 5;) {
-                        this.notifyTransferObject.waitForRunning(1000);
+                    for (int i = 0; !transferOK && i < 5;) {//bug:需要i++
+                        this.notifyTransferObject.waitForRunning(1000);//睡眠，等待slave写成功应答
                         transferOK = HAService.this.push2SlaveMaxOffset.get() >= req.getNextOffset();//push2SlaveMaxOffset谁来更新？--ReadSocketService
-                    }//做到了同步双写，但并不完美。但是MQ业务并不要求高实时。
+                    }//做到了同步双写，但不高效。但是MQ业务并不要求高实时。
 
                     if (!transferOK) {
                         log.warn("transfer messsage to slave timeout, " + req.getNextOffset());
