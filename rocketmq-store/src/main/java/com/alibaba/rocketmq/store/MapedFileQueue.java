@@ -161,7 +161,7 @@ public class MapedFileQueue {
             Arrays.sort(files);
             for (File file : files) {
                 // 校验文件大小是否匹配
-                if (file.length() != this.mapedFileSize) {//最后一个文件很有可能没满
+                if (file.length() != this.mapedFileSize) {//最后一个文件很有可能没满。升序排序，除非是最后一个文件，否则不会判断成功
                     log.warn(file + "\t" + file.length()
                             + " length not matched message store config value, ignore it");
                     return true;

@@ -1054,12 +1054,12 @@ public class DefaultMessageStore implements MessageStore {
         File dirLogic =
                 new File(StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig
                     .getStorePathRootDir()));
-        File[] fileTopicList = dirLogic.listFiles();
+        File[] fileTopicList = dirLogic.listFiles();//"/usr/home/store/consumequeue/topic*/files"
         if (fileTopicList != null) {
             // TOPIC 遍历
             for (File fileTopic : fileTopicList) {
-                String topic = fileTopic.getName();
-                // TOPIC 下队列遍历
+                String topic = fileTopic.getName();//每个topic在一个目录下存储
+                // TOPIC 目录下队列遍历
                 File[] fileQueueIdList = fileTopic.listFiles();
                 if (fileQueueIdList != null) {
                     for (File fileQueueId : fileQueueIdList) {
@@ -1106,7 +1106,7 @@ public class DefaultMessageStore implements MessageStore {
 
 
     private void recover(final boolean lastExitOK) {
-        // 先按照正常流程恢复Consume Queue。正常的判断逻辑是：consume queue每条数据的offset >= 0 && size > 0
+        // 先按照正常流程恢复Consume Queue。正常的判断逻辑是：consume queue每条数据的offset >= 0 && size > 0。除非意想不到的情况，否则不会出现不正常数据
         this.recoverConsumeQueue();
 
         // 正常数据恢复

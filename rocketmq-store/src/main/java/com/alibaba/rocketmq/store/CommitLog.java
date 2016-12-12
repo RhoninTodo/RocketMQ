@@ -383,7 +383,7 @@ public class CommitLog {
             MapedFile mapedFile = null;
             for (; index >= 0; index--) {
                 mapedFile = mapedFiles.get(index);
-                if (this.isMapedFileMatchedRecover(mapedFile)) {//用check point匹配commit log中的MapedFile
+                if (this.isMapedFileMatchedRecover(mapedFile)) {//用check point匹配commit log中的MapedFile，Consume Queue需要用这个File恢复
                     log.info("recover from this maped file " + mapedFile.getFileName());
                     break;//匹配到跳出
                 }
@@ -414,7 +414,7 @@ public class CommitLog {
                 // Come the end of the file, switch to the next file
                 // Since the return 0 representatives met last hole, this can
                 // not be included in truncate offset
-                else if (size == 0) {
+                else if (size == 0) {//当正常的数据从byteBuffer读完，末尾会有一个BlankMagicCode，用来走到这个分支
                     index++;
                     if (index >= mapedFiles.size()) {
                         // The current branch under normal circumstances should
