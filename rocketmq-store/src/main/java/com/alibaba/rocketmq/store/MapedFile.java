@@ -43,7 +43,7 @@ import com.alibaba.rocketmq.common.constant.LoggerName;
  * @since 2013-7-21
  */
 public class MapedFile extends ReferenceResource {
-    public static final int OS_PAGE_SIZE = 1024 * 4;
+    public static final int OS_PAGE_SIZE = 1024 * 4;//因为使用mmap，所以必须迁就操作系统的页大小，有的4k有的8k
     private static final Logger log = LoggerFactory.getLogger(LoggerName.StoreLoggerName);
     // 当前JVM中映射的虚拟内存总大小
     private static final AtomicLong TotalMapedVitualMemory = new AtomicLong(0);//这两个变量用于监控，防止泄露，犀利！
@@ -149,6 +149,7 @@ public class MapedFile extends ReferenceResource {
     }
 
 
+    //由一个buffer引用，向根部找原始值
     private static ByteBuffer viewed(ByteBuffer buffer) {
         String methodName = "viewedBuffer";
 
@@ -156,7 +157,7 @@ public class MapedFile extends ReferenceResource {
         Method[] methods = buffer.getClass().getMethods();
         for (int i = 0; i < methods.length; i++) {
             if (methods[i].getName().equals("attachment")) {
-                methodName = "attachment";
+                methodName = "attachment";//兼容所有jdk版本，不同版本的查找原buffer的方法名不同
                 break;
             }
         }
@@ -322,6 +323,7 @@ public class MapedFile extends ReferenceResource {
     }
 
 
+    //从当前byteBuffer截取一段，外层函数用于操作
     public SelectMapedBufferResult selectMapedBuffer(int pos, int size) {
         // 有消息
         if ((pos + size) <= this.wrotePostion.get()) {

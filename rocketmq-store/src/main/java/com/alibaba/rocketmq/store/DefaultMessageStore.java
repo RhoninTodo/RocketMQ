@@ -1259,6 +1259,7 @@ public class DefaultMessageStore implements MessageStore {
         /**
          * 最前面的文件有可能Hang住，定期检查一下
          */
+        //为什么第一个文件的会hang住
         private void redeleteHangedFile() {
             int interval = DefaultMessageStore.this.getMessageStoreConfig().getRedeleteHangedFileInterval();
             long currentTimestamp = System.currentTimeMillis();

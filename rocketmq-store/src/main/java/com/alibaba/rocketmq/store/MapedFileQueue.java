@@ -119,13 +119,13 @@ public class MapedFileQueue {
                 }
                 else {//无效数据之后的文件没用了
                     // 将文件删除掉
-                    file.destroy(1000);
+                    file.destroy(1000);//调用元素的去初始化方法
                     willRemoveFiles.add(file);
                 }
             }
         }
 
-        this.deleteExpiredFile(willRemoveFiles);
+        this.deleteExpiredFile(willRemoveFiles);//从List容器中移除
     }
 
 
@@ -173,7 +173,7 @@ public class MapedFileQueue {
 
                     mapedFile.setWrotePostion(this.mapedFileSize);
                     mapedFile.setCommittedPosition(this.mapedFileSize);
-                    this.mapedFiles.add(mapedFile);
+                    this.mapedFiles.add(mapedFile);//broker初始化，依然不需要加锁
                     log.info("load " + file.getPath() + " OK");
                 }
                 catch (IOException e) {
@@ -224,19 +224,19 @@ public class MapedFileQueue {
         {
             this.readWriteLock.readLock().lock();
             if (this.mapedFiles.isEmpty()) {
-                createOffset = startOffset - (startOffset % this.mapedFileSize);//计算文件起始的偏移
+                createOffset = startOffset - (startOffset % this.mapedFileSize);//1.list是空的。需要将参数以fileSize向下取整
             }
             else {
-                mapedFileLast = this.mapedFiles.get(this.mapedFiles.size() - 1);
+                mapedFileLast = this.mapedFiles.get(this.mapedFiles.size() - 1);//3.list不是空的
             }
             this.readWriteLock.readLock().unlock();
         }
 
         if (mapedFileLast != null && mapedFileLast.isFull()) {
-            createOffset = mapedFileLast.getFileFromOffset() + this.mapedFileSize;
+            createOffset = mapedFileLast.getFileFromOffset() + this.mapedFileSize;//2.最后一个文件满了
         }
 
-        if (createOffset != -1) {//需要新建一个MapedFile
+        if (createOffset != -1) {//1、2两种情况都需要新建一个MapedFile
             String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);//起始偏移就是文件名
             String nextNextFilePath =
                     this.storePath + File.separator
@@ -246,7 +246,7 @@ public class MapedFileQueue {
             if (this.allocateMapedFileService != null) {
                 mapedFile =
                         this.allocateMapedFileService.putRequestAndReturnMapedFile(nextFilePath,
-                            nextNextFilePath, this.mapedFileSize);//mmap会占用大量内存，放到服务里创建
+                            nextNextFilePath, this.mapedFileSize);//mmap会占用大量内存，放到服务里创建。预分配只有serviceThread可用
             }
             else {
                 try {
@@ -299,7 +299,7 @@ public class MapedFileQueue {
             this.readWriteLock.readLock().lock();
             if (!this.mapedFiles.isEmpty()) {
                 int lastIndex = this.mapedFiles.size() - 1;
-                MapedFile mapedFile = this.mapedFiles.get(lastIndex);
+                MapedFile mapedFile = this.mapedFiles.get(lastIndex);//并没有用getLastMapedFile，因为那个方法会新建文件，方法名起的并不好
                 return mapedFile.getFileFromOffset() + mapedFile.getWrotePostion();
             }
         }
@@ -322,7 +322,7 @@ public class MapedFileQueue {
             int lastIndex = this.mapedFiles.size() - 1;
             MapedFile mapedFile = this.mapedFiles.get(lastIndex);
             mapedFile.destroy(1000);
-            this.mapedFiles.remove(mapedFile);
+            this.mapedFiles.remove(mapedFile);//也没加锁，recoverAbnormally调用
             log.info("on recover, destroy a logic maped file " + mapedFile.getFileName());
         }
     }
@@ -331,6 +331,7 @@ public class MapedFileQueue {
     /**
      * 根据文件过期时间来删除物理队列文件
      */
+    //用于清除CommitLog
     public int deleteExpiredFileByTime(//
             final long expiredTime, //
             final int deleteFilesInterval, //
@@ -349,7 +350,7 @@ public class MapedFileQueue {
         if (null != mfs) {
             for (int i = 0; i < mfsLength; i++) {
                 MapedFile mapedFile = (MapedFile) mfs[i];
-                long liveMaxTimestamp = mapedFile.getLastModifiedTimestamp() + expiredTime;
+                long liveMaxTimestamp = mapedFile.getLastModifiedTimestamp() + expiredTime;//默认72h
                 if (System.currentTimeMillis() >= liveMaxTimestamp//
                         || cleanImmediately) {
                     if (mapedFile.destroy(intervalForcibly)) {
@@ -387,6 +388,7 @@ public class MapedFileQueue {
      * @param offset
      *            物理队列最小offset
      */
+    //用于清除ConsumeQueue
     public int deleteExpiredFileByOffset(long offset, int unitSize) {
         Object[] mfs = this.copyMapedFiles(0);
 
@@ -400,9 +402,9 @@ public class MapedFileQueue {
             for (int i = 0; i < mfsLength; i++) {
                 boolean destroy = true;
                 MapedFile mapedFile = (MapedFile) mfs[i];
-                SelectMapedBufferResult result = mapedFile.selectMapedBuffer(this.mapedFileSize - unitSize);
+                SelectMapedBufferResult result = mapedFile.selectMapedBuffer(this.mapedFileSize - unitSize);//拿到文件里的最后一条索引
                 if (result != null) {
-                    long maxOffsetInLogicQueue = result.getByteBuffer().getLong();
+                    long maxOffsetInLogicQueue = result.getByteBuffer().getLong();//前8字节是offset
                     result.release();
                     // 当前文件是否可以删除
                     destroy = (maxOffsetInLogicQueue < offset);
@@ -461,7 +463,7 @@ public class MapedFileQueue {
             MapedFile mapedFile = this.getFirstMapedFile();//第一个MapedFile起始偏移不一定是0。所以index是要减去firstMapedFile的
 
             if (mapedFile != null) {
-                int index =
+                int index =//offset绝对位置 - 第一个File绝对位置，即为list中的index
                         (int) ((offset / this.mapedFileSize) - (mapedFile.getFileFromOffset() / this.mapedFileSize));
                 if (index < 0 || index >= this.mapedFiles.size()) {
                     logError

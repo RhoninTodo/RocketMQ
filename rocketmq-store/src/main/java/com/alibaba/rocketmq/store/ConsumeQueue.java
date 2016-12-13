@@ -27,13 +27,13 @@ import com.alibaba.rocketmq.common.constant.LoggerName;
 
 /**
  * 消费队列实现
- * 默认每个ConsumeQueue存放30w条消息，也就是30w*20=600W Bytes大小
+ * 默认每个File存放30w条消息，也就是30w*20=600W Bytes大小。ConsumeQueue对象包含多个File
  * @author shijia.wxr<vintage.wang@gmail.com>
  * @since 2013-7-21
  */
 public class ConsumeQueue {
     // 存储单元大小
-    public static final int CQStoreUnitSize = 20;//每条消息用20bytes描述
+    public static final int CQStoreUnitSize = 20;//每条消息的索引用20bytes描述
     private static final Logger log = LoggerFactory.getLogger(LoggerName.StoreLoggerName);
     private static final Logger logError = LoggerFactory.getLogger(LoggerName.StoreErrorLoggerName);
     // 存储顶层对象

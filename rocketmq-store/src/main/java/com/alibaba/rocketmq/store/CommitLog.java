@@ -55,7 +55,7 @@ public class CommitLog {
     private final static int BlankMagicCode = 0xBBCCDDEE ^ 1880681586 + 8;
     private final MapedFileQueue mapedFileQueue;//每个mapedFile默认1GB
     private final DefaultMessageStore defaultMessageStore;
-    private final FlushCommitLogService flushCommitLogService;
+    private final FlushCommitLogService flushCommitLogService;//刷盘线程
     private final AppendMessageCallback appendMessageCallback;
     private HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(
         1024);//每个queue都对应一个consume queue，记录它们的偏移都到了哪
@@ -994,7 +994,7 @@ public class CommitLog {
             // Record ConsumeQueue information
             String key = msgInner.getTopic() + "-" + msgInner.getQueueId();
             Long queueOffset = CommitLog.this.topicQueueTable.get(key);//
-            if (null == queueOffset) {
+            if (null == queueOffset) {//之前没有收到过这个queue的消息
                 queueOffset = 0L;
                 CommitLog.this.topicQueueTable.put(key, queueOffset);
             }
@@ -1004,8 +1004,8 @@ public class CommitLog {
             switch (tranType) {
             // Prepared and Rollback message is not consumed, will not enter the
             // consumer queue
-            case MessageSysFlag.TransactionPreparedType://不需要加进consume queue，但是需要加进commit log
-            case MessageSysFlag.TransactionRollbackType:
+            case MessageSysFlag.TransactionPreparedType://不需要加进consume queue，但是需要加进commit log。
+            case MessageSysFlag.TransactionRollbackType://因为consumer只消费真正的数据消息，prepare和rollback只是用来控制事务的，并非数据
                 queueOffset = 0L;
                 break;
             case MessageSysFlag.TransactionNotType:
