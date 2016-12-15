@@ -153,6 +153,7 @@ public class MapedFileQueue {
     }
 
 
+    //最后一个未满的文件会被漏掉，没有地方会补，不知道为什么
     public boolean load() {
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();

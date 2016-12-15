@@ -178,7 +178,7 @@ public class CommitLog {
                 int size = dispatchRequest.getMsgSize();//这个commit log文件中包含多少个消息
                 // Normal data
                 if (size > 0) {
-                    mapedFileOffset += size;
+                    mapedFileOffset += size;//每条消息的长度，byteBuffer的position随之后移，直到文件尾会读出 BlankMagicCode
                 }
                 // Intermediate file read error
                 else if (size == -1) {
@@ -190,7 +190,7 @@ public class CommitLog {
                 // Since the return 0 representatives met last hole, this can
                 // not be included in truncate offset
                 //
-                else if (size == 0) {
+                else if (size == 0) {//commitLog每个文件的最后都会有一个空 BlankMagicCode占位
                     index++;
                     if (index >= mapedFiles.size()) {
                         // Current branch can not happen
@@ -208,7 +208,7 @@ public class CommitLog {
                 }
             }
 
-            processOffset += mapedFileOffset;
+            processOffset += mapedFileOffset;//commitLog文件无效数据的开始位置
             this.mapedFileQueue.setCommittedWhere(processOffset);
             this.mapedFileQueue.truncateDirtyFiles(processOffset);
         }
@@ -234,7 +234,7 @@ public class CommitLog {
             byte[] bytesContent = byteBufferMessage.array();
 
             // 1 TOTALSIZE
-            int totalSize = byteBuffer.getInt();
+            int totalSize = byteBuffer.getInt();//应该是一条消息占多少字节，并不是一个file里有多少条消息
 
             // 2 MAGICCODE
             int magicCode = byteBuffer.getInt();
@@ -383,7 +383,7 @@ public class CommitLog {
             MapedFile mapedFile = null;
             for (; index >= 0; index--) {
                 mapedFile = mapedFiles.get(index);
-                if (this.isMapedFileMatchedRecover(mapedFile)) {//用check point匹配commit log中的MapedFile，Consume Queue需要用这个File恢复
+                if (this.isMapedFileMatchedRecover(mapedFile)) {//用check point中的落地时间匹配commitLog中每个File的创建时间，Consume Queue需要用这个File恢复
                     log.info("recover from this maped file " + mapedFile.getFileName());
                     break;//匹配到跳出
                 }
@@ -400,7 +400,7 @@ public class CommitLog {
             while (true) {
                 DispatchRequest dispatchRequest =
                         this.checkMessageAndReturnSize(byteBuffer, checkCRCOnRecover);
-                int size = dispatchRequest.getMsgSize();
+                int size = dispatchRequest.getMsgSize();//在while循环里一条条的构造dispatchRequest
                 // Normal data
                 if (size > 0) {
                     mapedFileOffset += size;
@@ -414,7 +414,7 @@ public class CommitLog {
                 // Come the end of the file, switch to the next file
                 // Since the return 0 representatives met last hole, this can
                 // not be included in truncate offset
-                else if (size == 0) {//当正常的数据从byteBuffer读完，末尾会有一个BlankMagicCode，用来走到这个分支
+                else if (size == 0) {//当正常的数据一条一条的从byteBuffer读完，末尾会有一个BlankMagicCode，用来走到这个分支
                     index++;
                     if (index >= mapedFiles.size()) {
                         // The current branch under normal circumstances should
@@ -455,7 +455,7 @@ public class CommitLog {
             return false;
         }
 
-        long storeTimestamp = byteBuffer.getLong(MessageDecoder.MessageStoreTimestampPostion);//commit log第一条消息的存储时间戳？
+        long storeTimestamp = byteBuffer.getLong(MessageDecoder.MessageStoreTimestampPostion);//commit log中第一条消息的存储时间戳，即为文件创建时间
         if (0 == storeTimestamp) {
             return false;
         }
@@ -964,7 +964,7 @@ public class CommitLog {
         private static final int END_FILE_MIN_BLANK_LENGTH = 4 + 4;
         private final ByteBuffer msgIdMemory;
         // Store the message content
-        private final ByteBuffer msgStoreItemMemory;
+        private final ByteBuffer msgStoreItemMemory;//像瓢，是一个临时容器
         // The maximum length of the message 控制每条消息不能太大
         private final int maxMessageSize;
 

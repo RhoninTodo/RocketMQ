@@ -186,7 +186,7 @@ public class DefaultMessageStore implements MessageStore {
             }
 
             // load Commit Log
-            result = result && this.commitLog.load();
+            result = result && this.commitLog.load();//load只是建立起文件对应的MappedFileQueue。后面的recover是修复MappedFileQueue
 
             // load Consume Queue
             result = result && this.loadConsumeQueue();
@@ -1107,15 +1107,17 @@ public class DefaultMessageStore implements MessageStore {
 
     private void recover(final boolean lastExitOK) {
         // 先按照正常流程恢复Consume Queue。正常的判断逻辑是：consume queue每条数据的offset >= 0 && size > 0。除非意想不到的情况，否则不会出现不正常数据
+        // 从内存中剔除掉非正常的数据（前面的loadConsumeQueue会把除最后一个文件全load进内存，可能包含问题数据），并修复写指针等。
         this.recoverConsumeQueue();
 
         // 正常数据恢复
         if (lastExitOK) {
-            this.commitLog.recoverNormally();
+            this.commitLog.recoverNormally();//正常shutdown不需要同步commitLog和ConsumeQueue，shutdown时已经落盘并处理了。只要修正commitWhere就可以了
         }
         // 异常数据恢复，OS CRASH或者JVM CRASH或者机器掉电
         else {
-            this.commitLog.recoverAbnormally();//对于脏数据会重新dispatch
+            //和recoverNormally唯一的不同是，会对可能脏的数据重新dispatch到consumeQueue和indexService处理
+            this.commitLog.recoverAbnormally();//使用check point中的时间点，修复其以后的数据。对于脏数据会重新dispatch
         }
 
         // 保证消息都能从DispatchService缓冲队列进入到真正的队列

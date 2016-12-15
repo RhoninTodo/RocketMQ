@@ -45,7 +45,7 @@ public class ConsumeQueue {
     // queueId
     private final int queueId;
     // 写索引时用到的ByteBuffer
-    private final ByteBuffer byteBufferIndex;
+    private final ByteBuffer byteBufferIndex;//就像一个瓢。追加数据时，先放到瓢里，在往水缸里倒。所以它的大小就是一条索引的长度
     // 配置
     private final String storePath;
     private final int mapedFileSize;//30w*20
@@ -86,6 +86,7 @@ public class ConsumeQueue {
     }
 
 
+    //把没有问题的索引数据全部恢复，有问题的搁置
     public void recover() {
         final List<MapedFile> mapedFiles = this.mapedFileQueue.getMapedFiles();
         if (!mapedFiles.isEmpty()) {
@@ -116,7 +117,7 @@ public class ConsumeQueue {
                                 + offset + " " + size + " " + tagsCode);
                         break;
                     }
-                }
+                }//for循环退出，说明倒数第三个文件是没问题的
 
                 // 走到文件末尾，切换至下一个文件
                 if (mapedFileOffset == mapedFileSizeLogics) {
@@ -135,7 +136,7 @@ public class ConsumeQueue {
                         log.info("recover next consume queue file, " + mapedFile.getFileName());
                     }
                 }
-                else {//三个文件中某一个存储单元无效
+                else {//文件没写满，可能是文件数据不对，也可能是最后一个文件
                     log.info("recover current consume queue queue over " + mapedFile.getFileName() + " "
                             + (processOffset + mapedFileOffset));
                     break;

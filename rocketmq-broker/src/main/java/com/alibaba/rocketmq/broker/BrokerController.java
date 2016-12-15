@@ -291,7 +291,7 @@ public class BrokerController {
                     @Override
                     public void run() {
                         try {
-                            BrokerController.this.slaveSynchronize.syncAll(); // slave定时从slave同步信息
+                            BrokerController.this.slaveSynchronize.syncAll(); // slave定时从master同步信息
                         }
                         catch (Exception e) {
                             log.error("ScheduledTask syncAll slave exception", e);

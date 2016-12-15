@@ -306,7 +306,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         if (response.getCode()!=-1) {
 			return response;
 		}
-        
+
 
         final byte[] body = request.getBody();
         
@@ -346,7 +346,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {
             String traFlag = msgInner.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);
             if (traFlag != null) {
-                response.setCode(ResponseCode.NO_PERMISSION);
+                response.setCode(ResponseCode.NO_PERMISSION);//不允许producer发送事务消息
                 response.setRemark("the broker[" + this.brokerController.getBrokerConfig().getBrokerIP1()
                         + "] sending transaction message is forbidden");
                 return response;
