@@ -232,7 +232,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         }
 
         // 订阅关系处理
-        SubscriptionData subscriptionData = null;
+        //订阅信息--用于过滤消息用的tags。来源--producer和consumer设定topic时指定的
+        SubscriptionData subscriptionData = null; //如果拉取消息中附带了订阅信息，则总消息中读取。如果不附带，从内存中读取，内存中的数据由client心跳负责更新
         if (hasSubscriptionFlag) {
             try {
                 subscriptionData =
@@ -478,7 +479,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             response.setRemark("store getMessage return null");
         }
 
-        // 存储Consumer消费进度
+        // 存储Consumer消费进度。比如会有查询消费进度的cmd
         boolean storeOffsetEnable = brokerAllowSuspend; // 说明是首次调用，相对于长轮询通知
         storeOffsetEnable = storeOffsetEnable && hasCommitOffsetFlag; // 说明Consumer设置了标志位
         storeOffsetEnable = storeOffsetEnable // 只有Master支持存储offset

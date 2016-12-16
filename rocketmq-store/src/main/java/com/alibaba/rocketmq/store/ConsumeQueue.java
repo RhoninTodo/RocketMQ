@@ -514,7 +514,7 @@ public class ConsumeQueue {
         if (offset >= this.getMinLogicOffset()) {
             MapedFile mapedFile = this.mapedFileQueue.findMapedFileByOffset(offset);
             if (mapedFile != null) {
-                SelectMapedBufferResult result = mapedFile.selectMapedBuffer((int) (offset % mapedFileSize));
+                SelectMapedBufferResult result = mapedFile.selectMapedBuffer((int) (offset % mapedFileSize));//从offset到文件尾
                 return result;
             }
         }

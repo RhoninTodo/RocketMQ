@@ -492,7 +492,7 @@ public class DefaultMessageStore implements MessageStore {
                 status = GetMessageStatus.OFFSET_OVERFLOW_ONE;
                 nextBeginOffset = offset;
             }
-            else if (offset > maxOffset) {
+            else if (offset > maxOffset) {//判断各种请求偏移越界
                 status = GetMessageStatus.OFFSET_OVERFLOW_BADLY;
                 if (0 == minOffset) {
                     nextBeginOffset = minOffset;
